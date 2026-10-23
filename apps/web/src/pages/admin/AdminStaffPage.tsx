@@ -5,6 +5,7 @@ import { Navbar } from '../../components/common/Navbar.js';
 import { Badge } from '../../components/common/Badge.js';
 import { Modal } from '../../components/common/Modal.js';
 import { useAuth } from '../../context/AuthContext.js';
+import { Link } from 'react-router-dom';
 import {
   Users,
   UserPlus,
@@ -15,7 +16,8 @@ import {
   AlertCircle,
   CheckCircle2,
   ChefHat,
-  Monitor
+  Monitor,
+  Utensils
 } from 'lucide-react';
 
 export const AdminStaffPage: React.FC = () => {
@@ -188,6 +190,24 @@ export const AdminStaffPage: React.FC = () => {
       <Navbar />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Navigation Tabs (Staff vs Menu) */}
+        <div className="flex border-b border-slate-200 space-x-6 mb-6">
+          <Link
+            to="/admin/menu"
+            className="pb-3 text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center space-x-2"
+          >
+            <Utensils className="w-4 h-4" />
+            <span>Menu & Categories</span>
+          </Link>
+          <Link
+            to="/admin/staff"
+            className="pb-3 text-sm font-semibold text-orange-600 border-b-2 border-orange-600 flex items-center space-x-2"
+          >
+            <Users className="w-4 h-4" />
+            <span>Staff Management</span>
+          </Link>
+        </div>
+
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-slate-200">
           <div>

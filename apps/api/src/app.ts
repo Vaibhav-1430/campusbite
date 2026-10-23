@@ -7,6 +7,9 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { NotFoundError, ForbiddenError } from './utils/errors.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import userRoutes from './modules/users/user.routes.js';
+import categoryRoutes from './modules/menu/category.routes.js';
+import menuRoutes from './modules/menu/menu.routes.js';
+import orderRoutes from './modules/orders/order.routes.js';
 import { sendSuccess } from './utils/response.js';
 
 import { csrfProtection } from './middleware/csrf.js';
@@ -52,6 +55,9 @@ export const createApp = () => {
   // Feature Routes
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/users', userRoutes);
+  app.use('/api/v1/categories', categoryRoutes);
+  app.use('/api/v1/menu', menuRoutes);
+  app.use('/api/v1/orders', orderRoutes);
 
   // 404 Catch-All
   app.use((_req, _res, next) => {

@@ -5,7 +5,8 @@ import { AuthProvider } from './context/AuthContext.js';
 import { ProtectedRoute } from './components/common/ProtectedRoute.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { AdminStaffPage } from './pages/admin/AdminStaffPage.js';
-import { CounterShellPage } from './pages/counter/CounterShellPage.js';
+import { AdminMenuPage } from './pages/admin/AdminMenuPage.js';
+import { CounterPOSPage } from './pages/counter/CounterPOSPage.js';
 import { KitchenShellPage } from './pages/kitchen/KitchenShellPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 
@@ -19,8 +20,17 @@ export const App: React.FC = () => {
           <Route path="/" element={<Navigate to="/login" replace />} />
 
           {/* Admin Protected Routes */}
+          <Route path="/admin" element={<Navigate to="/admin/menu" replace />} />
           <Route
-            path="/admin"
+            path="/admin/menu"
+            element={
+              <ProtectedRoute allowedRoles={[Role.ADMIN]}>
+                <AdminMenuPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/staff"
             element={
               <ProtectedRoute allowedRoles={[Role.ADMIN]}>
                 <AdminStaffPage />
@@ -33,7 +43,7 @@ export const App: React.FC = () => {
             path="/counter"
             element={
               <ProtectedRoute allowedRoles={[Role.COUNTER, Role.ADMIN]}>
-                <CounterShellPage />
+                <CounterPOSPage />
               </ProtectedRoute>
             }
           />

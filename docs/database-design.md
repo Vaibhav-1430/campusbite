@@ -222,6 +222,19 @@ Tracks administrative and critical changes.
 
 ---
 
+### 3.12 Daily Order Sequence (`DailyOrderSequence`)
+Maintains atomic, collision-safe sequence counters per calendar date for order numbers (`CB-101`, `CB-102`...).
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Unique identifier |
+| `orderDate` | DATE | UNIQUE, NOT NULL | Calendar date in restaurant-local timezone |
+| `lastSequence` | INTEGER | NOT NULL, DEFAULT 100 | Last assigned daily order sequence number |
+| `createdAt` | TIMESTAMPTZ | DEFAULT NOW(), NOT NULL | Timestamp |
+| `updatedAt` | TIMESTAMPTZ | DEFAULT NOW(), NOT NULL | Timestamp |
+
+---
+
 ## 4. Prisma Schema Representation
 
 ```prisma

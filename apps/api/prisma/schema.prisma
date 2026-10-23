@@ -188,3 +188,9 @@ model AuditLog {
   @@index([actorId, createdAt])
   @@index([entityType, entityId])
 }
+
+model DailyOrderSequence {
+  orderDate    DateTime @id @db.Date
+  lastSequence Int      @default(100)
+}
+
