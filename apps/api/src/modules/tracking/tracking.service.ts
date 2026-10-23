@@ -13,6 +13,17 @@ const ipAttemptsMap = new Map<string, IpRateRecord>();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const MAX_FAILED_ATTEMPTS = 10;
 
+// Clean up expired rate-limit IP records every 5 minutes to prevent memory leak
+const cleanupInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of ipAttemptsMap.entries()) {
+    if (now - record.firstAttemptTime > RATE_LIMIT_WINDOW_MS) {
+      ipAttemptsMap.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000);
+if (cleanupInterval.unref) cleanupInterval.unref();
+
 const checkRateLimit = (ipAddress: string) => {
   const now = Date.now();
   const record = ipAttemptsMap.get(ipAddress);

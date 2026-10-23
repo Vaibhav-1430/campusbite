@@ -13,6 +13,7 @@ import orderRoutes from './modules/orders/order.routes.js';
 import trackingRoutes, { trackingOrderAliasHandler } from './modules/tracking/tracking.routes.js';
 import inventoryRoutes from './modules/inventory/inventory.routes.js';
 import analyticsRoutes from './modules/analytics/analytics.routes.js';
+import { prisma } from './database/prisma.js';
 import { sendSuccess } from './utils/response.js';
 
 import { csrfProtection } from './middleware/csrf.js';
@@ -50,10 +51,34 @@ export const createApp = () => {
   app.use(cookieParser());
   app.use(csrfProtection);
 
-  // Health check endpoint
-  app.get('/api/v1/health', (_req, res) => {
-    return sendSuccess(res, { status: 'healthy', timestamp: new Date().toISOString() });
-  });
+  // Health check endpoints (root /health for standard orchestrator probes and /api/v1/health)
+  const healthCheckHandler = async (_req: express.Request, res: express.Response) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      return sendSuccess(res, {
+        status: 'healthy',
+        database: 'connected',
+        uptimeSeconds: Math.floor(process.uptime()),
+        timestamp: new Date().toISOString()
+      }, 200);
+    } catch {
+      return res.status(503).json({
+        success: false,
+        error: {
+          code: 'SERVICE_DEGRADED',
+          message: 'Database connection failed'
+        },
+        meta: {
+          status: 'degraded',
+          database: 'disconnected',
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+  };
+
+  app.get('/health', healthCheckHandler);
+  app.get('/api/v1/health', healthCheckHandler);
 
   // Feature Routes
   app.use('/api/v1/auth', authRoutes);

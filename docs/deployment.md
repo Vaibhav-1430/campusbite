@@ -104,3 +104,27 @@ sequenceDiagram
 
 * **Neon / Supabase Automatic Snapshots**: Daily point-in-time snapshots are included in the free tier.
 * **Zero-Loss Closing Report Export**: Daily closing sales reports are downloadable as structured JSON and printable HTML by the administrator at the end of each operational shift, providing an offline hard-copy audit trail.
+
+---
+
+## 7. Comprehensive Hosting Provider Comparison (₹0 Budget)
+
+| Provider & Service | Target Component | Free-Tier Quota & Limits | Persistent DB? | WebSocket Support | Sleep / Cold-Starts | Backup & Retention | Upgrade Trigger | Official Docs |
+|---|---|---|:---:|:---:|---|---|---|---|
+| **Vercel** (Hobby) | Frontend SPA (`apps/web`) | 100 GB bandwidth/mo, unlimited preview deploys | N/A (Static SPA) | Full (client-side WSS) | None (CDN edge cached) | Git commits | Bandwidth > 100 GB/mo | [vercel.com/docs](https://vercel.com/docs) |
+| **Cloudflare Pages** | Frontend SPA (`apps/web`) | Unlimited bandwidth, 500 builds/mo | N/A (Static SPA) | Full (client-side WSS) | None (Edge CDN) | Git commits | Builds > 500/mo | [developers.cloudflare.com/pages](https://developers.cloudflare.com/pages) |
+| **Render** (Free Web Service) | Backend API (`apps/api`) | 512 MB RAM, 0.1 CPU, 750 free compute hours/mo | No (ephemeral disk) | Native HTTP/1.1 & WSS | Sleeps after 15 min idle (25–40s wake) | None on disk (use managed DB) | Active compute > 750 hrs or high RAM | [render.com/docs/free](https://render.com/docs/free) |
+| **Koyeb** (Free Instance) | Backend API (`apps/api`) | 512 MB RAM, 0.1 vCPU, 2 services | No (ephemeral disk) | Native WebSocket support | Stays awake (no auto-sleep on free) | Ephemeral disk | Compute usage cap | [koyeb.com/docs](https://koyeb.com/docs) |
+| **Neon** (Free Tier) | PostgreSQL DB | 0.5 GB storage, shared compute, 1 project | Yes (Serverless Postgres) | N/A (Database) | Scales to zero when idle (~1s wakeup) | 24-hr PITR, instant branching | Storage > 500 MB | [neon.tech/docs](https://neon.tech/docs) |
+| **Supabase** (Free Tier) | PostgreSQL DB | 500 MB database, 2 free projects, 50k MAU | Yes (PostgreSQL 15) | Realtime engine available | Pauses after 7 days inactivity | Daily automatic backups (7 days) | Storage > 500 MB or inactivity pause | [supabase.com/docs](https://supabase.com/docs) |
+
+---
+
+## 8. Related Phase 7 Operational Guides
+
+- [Production Readiness Checklist](file:///d:/Projects/campusbite/docs/production-readiness-checklist.md)
+- [Security Review & Threat Model](file:///d:/Projects/campusbite/docs/security-review.md)
+- [Environment Variables Catalog](file:///d:/Projects/campusbite/docs/environment-variables.md)
+- [Database Backup & Disaster Recovery](file:///d:/Projects/campusbite/docs/database-backup-and-recovery.md)
+- [Monitoring & Troubleshooting Guide](file:///d:/Projects/campusbite/docs/monitoring-and-troubleshooting.md)
+- [Launch Runbook](file:///d:/Projects/campusbite/docs/launch-runbook.md)

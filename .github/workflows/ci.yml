@@ -1,0 +1,58 @@
+name: CampusBite CI - Verification Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    name: Test, Lint & Production Build Gate
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: campusbite_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate --workspace=@campusbite/api
+
+      - name: Validate Database Migrations on Fresh DB
+        env:
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/campusbite_ci?schema=public
+        run: npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
+
+      - name: Run Monorepo Test Suites
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/campusbite_ci?schema=public
+          JWT_SECRET: ci_test_jwt_secret_with_sufficient_entropy_for_tests_32chars
+        run: npm test
+
+      - name: Verify Production Monorepo Build
+        run: npm run build
