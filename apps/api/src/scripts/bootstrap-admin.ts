@@ -23,9 +23,21 @@ export const bootstrapAdmin = async () => {
     const name = process.env.INITIAL_ADMIN_NAME || env.INITIAL_ADMIN_NAME;
     const password = process.env.INITIAL_ADMIN_PASSWORD || env.INITIAL_ADMIN_PASSWORD;
 
-    // Validate password strength
-    if (!password || password.length < 8) {
-      throw new Error('Initial admin password must be at least 8 characters long.');
+    // Validate password strength and forbid known defaults
+    const minLength = env.NODE_ENV === 'production' ? 12 : 8;
+    if (!password || password.length < minLength) {
+      throw new Error(`Initial admin password must be at least ${minLength} characters long.`);
+    }
+
+    if (env.NODE_ENV === 'production' && password === 'AdminPassword123!') {
+      throw new Error('SECURITY ERROR: "AdminPassword123!" cannot be used as an administrator password in production.');
+    }
+
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    if (!hasUpper || !hasLower || !hasNumber) {
+      throw new Error('Initial admin password must include uppercase, lowercase, and numbers.');
     }
 
     const passwordHash = await hashPassword(password);

@@ -4,13 +4,18 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
 import { errorHandler } from './middleware/errorHandler.js';
-import { NotFoundError } from './utils/errors.js';
+import { NotFoundError, ForbiddenError } from './utils/errors.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import userRoutes from './modules/users/user.routes.js';
 import { sendSuccess } from './utils/response.js';
 
+import { csrfProtection } from './middleware/csrf.js';
+
 export const createApp = () => {
   const app = express();
+
+  // Trust first proxy for correct client IP detection behind reverse proxies
+  app.set('trust proxy', 1);
 
   // Security Headers
   app.use(helmet());
@@ -24,7 +29,7 @@ export const createApp = () => {
         if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
           callback(null, true);
         } else {
-          callback(new Error(`Origin ${origin} not allowed by CORS`));
+          callback(new ForbiddenError(`Origin ${origin} not allowed by CORS policy.`, 'CORS_NOT_ALLOWED'));
         }
       },
       credentials: true,
@@ -37,6 +42,7 @@ export const createApp = () => {
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
   app.use(cookieParser());
+  app.use(csrfProtection);
 
   // Health check endpoint
   app.get('/api/v1/health', (_req, res) => {
