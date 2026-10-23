@@ -11,6 +11,7 @@ import categoryRoutes from './modules/menu/category.routes.js';
 import menuRoutes from './modules/menu/menu.routes.js';
 import orderRoutes from './modules/orders/order.routes.js';
 import trackingRoutes, { trackingOrderAliasHandler } from './modules/tracking/tracking.routes.js';
+import inventoryRoutes from './modules/inventory/inventory.routes.js';
 import { sendSuccess } from './utils/response.js';
 
 import { csrfProtection } from './middleware/csrf.js';
@@ -61,6 +62,7 @@ export const createApp = () => {
   app.use('/api/v1/orders', orderRoutes);
   app.use('/api/v1/kitchen/orders', orderRoutes);
   app.use('/api/v1/tracking', trackingRoutes);
+  app.use('/api/v1/inventory', inventoryRoutes);
   app.post('/api/v1/orders/track', trackingOrderAliasHandler);
 
   // 404 Catch-All

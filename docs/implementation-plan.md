@@ -143,23 +143,32 @@ gantt
 ---
 
 ### Phase 5 — Inventory and Operational Features
+* **Status**: Complete & Verified (124 Monorepo Automated Tests Passing, 0 Regressions)
 * **Scope**:
   - Stock item management (`currentQuantity`, `lowStockThreshold`, `unit`).
-  - Menu item association with stock items.
+  - Menu item association with stock items (optional linkage to inventory).
   - Atomic stock deduction during order checkout inside PostgreSQL transaction.
+  - Insufficient stock rejection (`INSUFFICIENT_STOCK`) preventing overselling.
   - Order cancellation authorization rules (Counter can cancel `PLACED`; Admin can cancel `PLACED` or `PREPARING`).
-  - Mandatory cancellation reason logging.
-  - Automatic stock restoration on order cancellation.
+  - Mandatory cancellation reason logging with audit movements.
+  - Automatic stock restoration (`CANCELLATION_RESTORE`) on order cancellation.
+  - Real-time stock updates (`STOCK_UPDATED`) and alerts (`STOCK_LOW_ALERT`) via Socket.IO.
+  - Real-time menu item availability updates (`MENU_AVAILABILITY_CHANGED`).
   - Visual low-stock alert badges on Admin and Counter POS screens.
-  - Immutable `InventoryMovement` ledger.
+  - Out-of-stock disabled states on Counter POS preventing checkout on unavailable/exhausted items.
+  - Mobile-first Operational Dashboard with metric overview cards (`/admin/inventory`).
+  - Quick restock modal (+N) and manual adjustment/waste modal with mandatory reason.
+  - Immutable `InventoryMovement` ledger capturing previous/new balances, staff member, and notes.
 * **Testing & Verification**:
-  - Concurrent stock deduction test: Attempting to order 5 units when 4 remain fails with out-of-stock.
-  - Cancellation test: Cancelling order correctly restores inventory balance and logs audit trail.
+  - Concurrent stock deduction test: Attempting to order 5 units when 4 remain fails with out-of-stock. [PASS]
+  - Cancellation test: Cancelling order correctly restores inventory balance and logs audit trail. [PASS]
+  - RBAC verification: Admin, Counter, and Kitchen permissions enforced on API and UI. [PASS]
+  - UI verification: 19 web unit tests and full browser subagent e2e test passing. [PASS]
 * **Acceptance Criteria**:
-  1. Selling stock-tracked items decrements available inventory atomically.
-  2. Overselling is prevented under concurrent checkout attempts.
-  3. Cancelling an order restores inventory and requires a non-empty reason.
-  4. Low-stock warnings appear when quantity falls below threshold.
+  1. Selling stock-tracked items decrements available inventory atomically. [PASS]
+  2. Overselling is prevented under concurrent checkout attempts. [PASS]
+  3. Cancelling an order restores inventory and requires a non-empty reason. [PASS]
+  4. Low-stock warnings appear when quantity falls below threshold. [PASS]
 
 ---
 

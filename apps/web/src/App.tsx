@@ -8,6 +8,7 @@ import { CustomerTrackingPage } from './pages/tracking/CustomerTrackingPage.js';
 import { PublicDisplayBoardPage } from './pages/display/PublicDisplayBoardPage.js';
 import { AdminStaffPage } from './pages/admin/AdminStaffPage.js';
 import { AdminMenuPage } from './pages/admin/AdminMenuPage.js';
+import { AdminInventoryPage } from './pages/admin/AdminInventoryPage.js';
 import { CounterPOSPage } from './pages/counter/CounterPOSPage.js';
 import { KitchenKDSPage } from './pages/kitchen/KitchenKDSPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
@@ -34,6 +35,14 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute allowedRoles={[Role.ADMIN]}>
                 <AdminMenuPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/inventory"
+            element={
+              <ProtectedRoute allowedRoles={[Role.ADMIN]}>
+                <AdminInventoryPage />
               </ProtectedRoute>
             }
           />

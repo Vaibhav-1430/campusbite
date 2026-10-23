@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import {
   CategoryDto,
   MenuItemDto,
+  StockItemDto,
   createCategorySchema,
   updateCategorySchema,
   createMenuItemSchema,
@@ -27,7 +28,8 @@ import {
   Users,
   Eye,
   EyeOff,
-  Clock
+  Clock,
+  Boxes
 } from 'lucide-react';
 
 export const AdminMenuPage: React.FC = () => {
@@ -48,6 +50,9 @@ export const AdminMenuPage: React.FC = () => {
   const [categorySubmitting, setCategorySubmitting] = useState(false);
   const [categoryError, setCategoryError] = useState<string | null>(null);
 
+  // Stock Items State
+  const [stockItems, setStockItems] = useState<StockItemDto[]>([]);
+
   // Menu Item Modal State
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItemDto | null>(null);
@@ -58,7 +63,8 @@ export const AdminMenuPage: React.FC = () => {
     priceRupees: 0,
     prepTimeMinutes: 10,
     imageUrl: '',
-    isAvailable: true
+    isAvailable: true,
+    stockItemId: ''
   });
   const [itemSubmitting, setItemSubmitting] = useState(false);
   const [itemError, setItemError] = useState<string | null>(null);
@@ -66,12 +72,14 @@ export const AdminMenuPage: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [catsRes, itemsRes] = await Promise.all([
+      const [catsRes, itemsRes, stockRes] = await Promise.all([
         apiRequest<{ categories: CategoryDto[] }>('/categories?includeInactive=true'),
-        apiRequest<{ items: MenuItemDto[] }>('/menu?includeInactiveCategory=true')
+        apiRequest<{ items: MenuItemDto[] }>('/menu?includeInactiveCategory=true'),
+        apiRequest<{ items: StockItemDto[] }>('/inventory')
       ]);
       setCategories(catsRes.categories);
       setMenuItems(itemsRes.items);
+      setStockItems(stockRes.items);
     } catch (err) {
       if (err instanceof ApiError) {
         setErrorMessage(err.message);
@@ -176,7 +184,8 @@ export const AdminMenuPage: React.FC = () => {
       pricePaise,
       prepTimeMinutes: Number(itemForm.prepTimeMinutes),
       imageUrl: itemForm.imageUrl.trim() ? itemForm.imageUrl : null,
-      isAvailable: itemForm.isAvailable
+      isAvailable: itemForm.isAvailable,
+      stockItemId: itemForm.stockItemId ? itemForm.stockItemId : null
     };
 
     const schema = editingItem ? updateMenuItemSchema : createMenuItemSchema;
@@ -254,7 +263,7 @@ export const AdminMenuPage: React.FC = () => {
       <Navbar />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Navigation Tabs (Staff vs Menu) */}
+        {/* Navigation Tabs (Menu vs Inventory vs Staff) */}
         <div className="flex border-b border-slate-200 space-x-6 mb-6">
           <Link
             to="/admin/menu"
@@ -262,6 +271,13 @@ export const AdminMenuPage: React.FC = () => {
           >
             <Utensils className="w-4 h-4" />
             <span>Menu & Categories</span>
+          </Link>
+          <Link
+            to="/admin/inventory"
+            className="pb-3 text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center space-x-2"
+          >
+            <Boxes className="w-4 h-4" />
+            <span>Inventory & Stock</span>
           </Link>
           <Link
             to="/admin/staff"
@@ -296,7 +312,8 @@ export const AdminMenuPage: React.FC = () => {
                     priceRupees: 60,
                     prepTimeMinutes: 10,
                     imageUrl: '',
-                    isAvailable: true
+                    isAvailable: true,
+                    stockItemId: ''
                   });
                   setIsItemModalOpen(true);
                 }}
@@ -442,6 +459,31 @@ export const AdminMenuPage: React.FC = () => {
                                 {item.description}
                               </div>
                             )}
+                            {item.stockItem ? (
+                              <div className="mt-1 flex items-center space-x-1.5 text-xs">
+                                <Boxes className="w-3.5 h-3.5 text-slate-400" />
+                                <span className="text-slate-600 font-medium">
+                                  {item.stockItem.name}:
+                                </span>
+                                {item.stockItem.isOutOfStock ? (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">
+                                    0 {item.stockItem.unit} (Out of Stock)
+                                  </span>
+                                ) : item.stockItem.isLowStock ? (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                                    {item.stockItem.currentQuantity} {item.stockItem.unit} (Low Stock)
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                                    {item.stockItem.currentQuantity} {item.stockItem.unit}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="mt-1 text-[11px] text-slate-400">
+                                Unmonitored (No inventory linkage)
+                              </div>
+                            )}
                           </td>
                           <td className="px-6 py-4">
                             <span className="text-xs font-medium px-2 py-1 bg-slate-100 rounded text-slate-700">
@@ -490,7 +532,8 @@ export const AdminMenuPage: React.FC = () => {
                                   priceRupees: paiseToRupees(item.pricePaise),
                                   prepTimeMinutes: item.prepTimeMinutes,
                                   imageUrl: item.imageUrl || '',
-                                  isAvailable: item.isAvailable
+                                  isAvailable: item.isAvailable,
+                                  stockItemId: item.stockItemId || ''
                                 });
                                 setIsItemModalOpen(true);
                               }}
@@ -745,6 +788,27 @@ export const AdminMenuPage: React.FC = () => {
               placeholder="Ingredients, toppings, or dietary details..."
               className="mt-1 block w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-orange-600 focus:outline-none"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-700">
+              Linked Inventory Stock Item (Optional)
+            </label>
+            <select
+              value={itemForm.stockItemId}
+              onChange={(e) => setItemForm({ ...itemForm, stockItemId: e.target.value })}
+              className="mt-1 block w-full px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-orange-600 focus:outline-none"
+            >
+              <option value="">No stock tracking (Unmonitored)</option>
+              {stockItems.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.currentQuantity} {s.unit} in stock)
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-slate-500">
+              When linked, customer orders will automatically deduct stock and reject orders when depleted.
+            </p>
           </div>
 
           <div className="flex items-center space-x-2 pt-2">

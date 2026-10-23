@@ -19,6 +19,15 @@ export interface MenuItemDto {
   imageUrl: string | null;
   isAvailable: boolean;
   stockItemId: string | null;
+  stockItem?: {
+    id: string;
+    name: string;
+    unit: string;
+    currentQuantity: number;
+    lowStockThreshold: number;
+    isLowStock: boolean;
+    isOutOfStock: boolean;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }

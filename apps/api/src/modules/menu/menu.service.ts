@@ -4,6 +4,45 @@ import { BadRequestError, NotFoundError } from '../../utils/errors.js';
 import { logAudit } from '../audit/audit.service.js';
 import { getIO } from '../events/socket.js';
 
+const defaultMenuInclude = {
+  category: { select: { name: true } },
+  stockItem: {
+    select: {
+      id: true,
+      name: true,
+      unit: true,
+      currentQuantity: true,
+      lowStockThreshold: true
+    }
+  }
+};
+
+const mapMenuItem = (item: any): MenuItemDto => ({
+  id: item.id,
+  categoryId: item.categoryId,
+  categoryName: item.category?.name,
+  name: item.name,
+  description: item.description,
+  pricePaise: item.pricePaise,
+  prepTimeMinutes: item.prepTimeMinutes,
+  imageUrl: item.imageUrl,
+  isAvailable: item.isAvailable,
+  stockItemId: item.stockItemId,
+  stockItem: item.stockItem
+    ? {
+        id: item.stockItem.id,
+        name: item.stockItem.name,
+        unit: item.stockItem.unit,
+        currentQuantity: item.stockItem.currentQuantity,
+        lowStockThreshold: item.stockItem.lowStockThreshold,
+        isLowStock: item.stockItem.currentQuantity <= item.stockItem.lowStockThreshold,
+        isOutOfStock: item.stockItem.currentQuantity <= 0
+      }
+    : null,
+  createdAt: item.createdAt.toISOString(),
+  updatedAt: item.updatedAt.toISOString()
+});
+
 export interface MenuListFilters {
   categoryId?: string;
   isAvailable?: boolean;
@@ -36,53 +75,23 @@ export const listMenuItems = async (filters: MenuListFilters = {}): Promise<Menu
   const items = await prisma.menuItem.findMany({
     where,
     orderBy: [{ category: { displayOrder: 'asc' } }, { name: 'asc' }],
-    include: {
-      category: {
-        select: { name: true }
-      }
-    }
+    include: defaultMenuInclude
   });
 
-  return items.map((item) => ({
-    id: item.id,
-    categoryId: item.categoryId,
-    categoryName: item.category.name,
-    name: item.name,
-    description: item.description,
-    pricePaise: item.pricePaise,
-    prepTimeMinutes: item.prepTimeMinutes,
-    imageUrl: item.imageUrl,
-    isAvailable: item.isAvailable,
-    stockItemId: item.stockItemId,
-    createdAt: item.createdAt.toISOString(),
-    updatedAt: item.updatedAt.toISOString()
-  }));
+  return items.map(mapMenuItem);
 };
 
 export const getMenuItemById = async (id: string): Promise<MenuItemDto> => {
   const item = await prisma.menuItem.findUnique({
     where: { id },
-    include: { category: { select: { name: true } } }
+    include: defaultMenuInclude
   });
 
   if (!item) {
     throw new NotFoundError('Menu item not found.', 'MENU_ITEM_NOT_FOUND');
   }
 
-  return {
-    id: item.id,
-    categoryId: item.categoryId,
-    categoryName: item.category.name,
-    name: item.name,
-    description: item.description,
-    pricePaise: item.pricePaise,
-    prepTimeMinutes: item.prepTimeMinutes,
-    imageUrl: item.imageUrl,
-    isAvailable: item.isAvailable,
-    stockItemId: item.stockItemId,
-    createdAt: item.createdAt.toISOString(),
-    updatedAt: item.updatedAt.toISOString()
-  };
+  return mapMenuItem(item);
 };
 
 export const createMenuItem = async (
@@ -110,7 +119,7 @@ export const createMenuItem = async (
       isAvailable: input.isAvailable ?? true,
       stockItemId: input.stockItemId ?? null
     },
-    include: { category: { select: { name: true } } }
+    include: defaultMenuInclude
   });
 
   await logAudit({
@@ -123,20 +132,7 @@ export const createMenuItem = async (
     ipAddress
   });
 
-  return {
-    id: item.id,
-    categoryId: item.categoryId,
-    categoryName: item.category.name,
-    name: item.name,
-    description: item.description,
-    pricePaise: item.pricePaise,
-    prepTimeMinutes: item.prepTimeMinutes,
-    imageUrl: item.imageUrl,
-    isAvailable: item.isAvailable,
-    stockItemId: item.stockItemId,
-    createdAt: item.createdAt.toISOString(),
-    updatedAt: item.updatedAt.toISOString()
-  };
+  return mapMenuItem(item);
 };
 
 export const updateMenuItem = async (
@@ -175,7 +171,7 @@ export const updateMenuItem = async (
       ...(input.isAvailable !== undefined ? { isAvailable: input.isAvailable } : {}),
       ...(input.stockItemId !== undefined ? { stockItemId: input.stockItemId } : {})
     },
-    include: { category: { select: { name: true } } }
+    include: defaultMenuInclude
   });
 
   await logAudit({
@@ -192,20 +188,7 @@ export const updateMenuItem = async (
     ipAddress
   });
 
-  return {
-    id: updated.id,
-    categoryId: updated.categoryId,
-    categoryName: updated.category.name,
-    name: updated.name,
-    description: updated.description,
-    pricePaise: updated.pricePaise,
-    prepTimeMinutes: updated.prepTimeMinutes,
-    imageUrl: updated.imageUrl,
-    isAvailable: updated.isAvailable,
-    stockItemId: updated.stockItemId,
-    createdAt: updated.createdAt.toISOString(),
-    updatedAt: updated.updatedAt.toISOString()
-  };
+  return mapMenuItem(updated);
 };
 
 export const updateAvailability = async (
@@ -226,7 +209,7 @@ export const updateAvailability = async (
   const updated = await prisma.menuItem.update({
     where: { id },
     data: { isAvailable },
-    include: { category: { select: { name: true } } }
+    include: defaultMenuInclude
   });
 
   await logAudit({
@@ -249,20 +232,7 @@ export const updateAvailability = async (
     });
   }
 
-  return {
-    id: updated.id,
-    categoryId: updated.categoryId,
-    categoryName: updated.category.name,
-    name: updated.name,
-    description: updated.description,
-    pricePaise: updated.pricePaise,
-    prepTimeMinutes: updated.prepTimeMinutes,
-    imageUrl: updated.imageUrl,
-    isAvailable: updated.isAvailable,
-    stockItemId: updated.stockItemId,
-    createdAt: updated.createdAt.toISOString(),
-    updatedAt: updated.updatedAt.toISOString()
-  };
+  return mapMenuItem(updated);
 };
 
 export const deleteMenuItem = async (

@@ -117,11 +117,16 @@ Immutable ledger of all inventory additions, subtractions, and restorations.
 | `id` | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Unique identifier |
 | `stockItemId`| UUID | NOT NULL, REFERENCES StockItem(id) | Affected stock item |
 | `quantityChange`| INTEGER | NOT NULL | Positive for restock/restoration, negative for deduction |
+| `previousQuantity`| INTEGER | NULL | Stock balance immediately prior to movement |
+| `newQuantity`| INTEGER | NULL | Stock balance immediately following movement |
 | `type` | ENUM | NOT NULL | `ORDER_DEDUCTION`, `CANCELLATION_RESTORE`, `MANUAL_RESTOCK`, `MANUAL_ADJUSTMENT` |
 | `orderId` | UUID | NULL, REFERENCES Order(id) | Linked order if caused by sale/cancel |
 | `performedById`| UUID | NOT NULL, REFERENCES User(id) | Staff member who triggered movement |
 | `note` | TEXT | NULL | Reason or invoice notes |
 | `createdAt` | TIMESTAMPTZ | DEFAULT NOW(), NOT NULL | Timestamp of ledger entry |
+
+*Indexes:*
+- `idx_inventory_movement_stock_created` ON (`stockItemId`, `createdAt`)
 
 ---
 

@@ -138,14 +138,59 @@ export const createOrder = async (
 
   const initialEstimatedMinutes = maxPrepTime > 0 ? maxPrepTime : 10;
 
-  // 3. Generate secure random 4-digit PIN (e.g. 1000 - 9999)
+  // 3. Aggregate required stock per stockItemId
+  const requiredStockMap = new Map<string, { quantity: number; menuItemName: string }>();
+  for (const itemInput of input.items) {
+    const menuItem = menuItemMap.get(itemInput.menuItemId)!;
+    if (menuItem.stockItemId) {
+      const existing = requiredStockMap.get(menuItem.stockItemId);
+      if (existing) {
+        existing.quantity += itemInput.quantity;
+      } else {
+        requiredStockMap.set(menuItem.stockItemId, {
+          quantity: itemInput.quantity,
+          menuItemName: menuItem.name
+        });
+      }
+    }
+  }
+
+  // 4. Generate secure random 4-digit PIN (e.g. 1000 - 9999)
   const pin = crypto.randomInt(1000, 10000).toString();
   const customerPinHash = await hashPassword(pin);
 
-  // 4. Atomic transaction to generate daily sequence and persist order
+  // 5. Atomic transaction to validate/deduct stock, generate sequence, and persist order
   const orderDate = new Date();
+  const affectedStockAlerts: Array<{ id: string; name: string; currentQuantity: number; lowStockThreshold: number }> = [];
 
   const createdOrder = await prisma.$transaction(async (tx) => {
+    // 5a. Deduct stock for all tracked items
+    for (const [stockItemId, { quantity: requiredQty, menuItemName }] of requiredStockMap.entries()) {
+      const stock = await tx.stockItem.findUnique({ where: { id: stockItemId } });
+      if (!stock) {
+        throw new NotFoundError(`Stock item for "${menuItemName}" not found.`, 'STOCK_ITEM_NOT_FOUND');
+      }
+
+      if (stock.currentQuantity < requiredQty) {
+        throw new BadRequestError(
+          `Insufficient stock for "${menuItemName}". Only ${stock.currentQuantity} ${stock.unit} available (requested: ${requiredQty}).`,
+          'INSUFFICIENT_STOCK'
+        );
+      }
+
+      const updatedStock = await tx.stockItem.update({
+        where: { id: stockItemId },
+        data: { currentQuantity: { decrement: requiredQty } }
+      });
+
+      affectedStockAlerts.push({
+        id: updatedStock.id,
+        name: updatedStock.name,
+        currentQuantity: updatedStock.currentQuantity,
+        lowStockThreshold: updatedStock.lowStockThreshold
+      });
+    }
+
     const dailyOrderNumber = await getNextDailyOrderNumber(orderDate, tx);
 
     const order = await tx.order.create({
@@ -174,8 +219,50 @@ export const createOrder = async (
       include: defaultOrderInclude
     });
 
+    // 5b. Record inventory deduction movements linked to the created order
+    for (const [stockItemId, { quantity: requiredQty }] of requiredStockMap.entries()) {
+      const affected = affectedStockAlerts.find((s) => s.id === stockItemId);
+      const previousQuantity = affected ? affected.currentQuantity + requiredQty : requiredQty;
+      const newQuantity = affected ? affected.currentQuantity : 0;
+
+      await tx.inventoryMovement.create({
+        data: {
+          stockItemId,
+          quantityChange: -requiredQty,
+          previousQuantity,
+          newQuantity,
+          type: 'ORDER_DEDUCTION',
+          orderId: order.id,
+          performedById: createdById,
+          note: `Sold in Order #${dailyOrderNumber}`
+        }
+      });
+    }
+
     return order;
   });
+
+  // Emit stock updates and low-stock alerts
+  const ioStock = getIO();
+  if (ioStock && affectedStockAlerts.length > 0) {
+    for (const stockInfo of affectedStockAlerts) {
+      ioStock.to('staff:admin').to('staff:counter').emit('STOCK_UPDATED', {
+        stockItemId: stockInfo.id,
+        name: stockInfo.name,
+        currentQuantity: stockInfo.currentQuantity,
+        lowStockThreshold: stockInfo.lowStockThreshold
+      });
+
+      if (stockInfo.currentQuantity <= stockInfo.lowStockThreshold) {
+        ioStock.to('staff:admin').to('staff:counter').emit('STOCK_LOW_ALERT', {
+          stockItemId: stockInfo.id,
+          name: stockInfo.name,
+          currentQuantity: stockInfo.currentQuantity,
+          lowStockThreshold: stockInfo.lowStockThreshold
+        });
+      }
+    }
+  }
 
   // 5. Log operational audit
   await logAudit({
@@ -794,53 +881,106 @@ export const cancelOrder = async (
     ? [OrderStatus.PLACED]
     : [OrderStatus.PLACED, OrderStatus.PREPARING];
 
-  const updateResult = await prisma.order.updateMany({
-    where: {
-      id,
-      status: { in: eligibleStatuses }
-    },
-    data: {
-      status: OrderStatus.CANCELLED,
-      cancelledAt,
-      cancellationReason: reason.trim()
-    }
-  });
+  const restoredStockAlerts: Array<{ id: string; name: string; currentQuantity: number; lowStockThreshold: number }> = [];
 
-  if (updateResult.count === 0) {
-    const current = await prisma.order.findUnique({ where: { id } });
-    if (!current) throw new NotFoundError('Order not found.', 'ORDER_NOT_FOUND');
-    if (current.status === OrderStatus.CANCELLED) {
-      throw new BadRequestError('Order is already cancelled.', 'ALREADY_CANCELLED');
-    }
-    if (current.status === OrderStatus.COMPLETED) {
-      throw new BadRequestError('Cannot cancel an order that has already been handed over.', 'ALREADY_COMPLETED');
-    }
-    if (role === Role.COUNTER && current.status === OrderStatus.PREPARING) {
+  const updatedOrder = await prisma.$transaction(async (tx) => {
+    const updateResult = await tx.order.updateMany({
+      where: {
+        id,
+        status: { in: eligibleStatuses }
+      },
+      data: {
+        status: OrderStatus.CANCELLED,
+        cancelledAt,
+        cancellationReason: reason.trim()
+      }
+    });
+
+    if (updateResult.count === 0) {
+      const current = await tx.order.findUnique({ where: { id } });
+      if (!current) throw new NotFoundError('Order not found.', 'ORDER_NOT_FOUND');
+      if (current.status === OrderStatus.CANCELLED) {
+        throw new BadRequestError('Order is already cancelled.', 'ALREADY_CANCELLED');
+      }
+      if (current.status === OrderStatus.COMPLETED) {
+        throw new BadRequestError('Cannot cancel an order that has already been handed over.', 'ALREADY_COMPLETED');
+      }
+      if (role === Role.COUNTER && current.status === OrderStatus.PREPARING) {
+        throw new BadRequestError(
+          'Cannot cancel: kitchen has already begun preparing this order. Contact an administrator.',
+          'ORDER_ALREADY_PREPARING'
+        );
+      }
       throw new BadRequestError(
-        'Cannot cancel: kitchen has already begun preparing this order. Contact an administrator.',
-        'ORDER_ALREADY_PREPARING'
+        `Cannot cancel order in "${current.status}" status.`,
+        'INVALID_STATUS_FOR_CANCELLATION'
       );
     }
-    throw new BadRequestError(
-      `Cannot cancel order in "${current.status}" status.`,
-      'INVALID_STATUS_FOR_CANCELLATION'
-    );
-  }
 
-  await prisma.orderStatusHistory.create({
-    data: {
-      orderId: id,
-      previousStatus: eligibleStatuses.length === 1 ? OrderStatus.PLACED : OrderStatus.PREPARING,
-      newStatus: OrderStatus.CANCELLED,
-      changedById: staffId,
-      reason: reason.trim()
+    await tx.orderStatusHistory.create({
+      data: {
+        orderId: id,
+        previousStatus: eligibleStatuses.length === 1 ? OrderStatus.PLACED : OrderStatus.PREPARING,
+        newStatus: OrderStatus.CANCELLED,
+        changedById: staffId,
+        reason: reason.trim()
+      }
+    });
+
+    // Restore any deducted inventory for this order
+    const deductions = await tx.inventoryMovement.findMany({
+      where: {
+        orderId: id,
+        type: 'ORDER_DEDUCTION'
+      }
+    });
+
+    for (const deduction of deductions) {
+      const restoreQty = Math.abs(deduction.quantityChange);
+      const updatedStock = await tx.stockItem.update({
+        where: { id: deduction.stockItemId },
+        data: { currentQuantity: { increment: restoreQty } }
+      });
+
+      await tx.inventoryMovement.create({
+        data: {
+          stockItemId: deduction.stockItemId,
+          quantityChange: restoreQty,
+          previousQuantity: updatedStock.currentQuantity - restoreQty,
+          newQuantity: updatedStock.currentQuantity,
+          type: 'CANCELLATION_RESTORE',
+          orderId: id,
+          performedById: staffId,
+          note: `Restored on cancellation: ${reason.trim()}`
+        }
+      });
+
+      restoredStockAlerts.push({
+        id: updatedStock.id,
+        name: updatedStock.name,
+        currentQuantity: updatedStock.currentQuantity,
+        lowStockThreshold: updatedStock.lowStockThreshold
+      });
     }
+
+    return tx.order.findUniqueOrThrow({
+      where: { id },
+      include: defaultOrderInclude
+    });
   });
 
-  const updatedOrder = await prisma.order.findUniqueOrThrow({
-    where: { id },
-    include: defaultOrderInclude
-  });
+  // Emit stock updates for restored items
+  const ioStock = getIO();
+  if (ioStock && restoredStockAlerts.length > 0) {
+    for (const stockInfo of restoredStockAlerts) {
+      ioStock.to('staff:admin').to('staff:counter').emit('STOCK_UPDATED', {
+        stockItemId: stockInfo.id,
+        name: stockInfo.name,
+        currentQuantity: stockInfo.currentQuantity,
+        lowStockThreshold: stockInfo.lowStockThreshold
+      });
+    }
+  }
 
   await logAudit({
     actorId: staffId,

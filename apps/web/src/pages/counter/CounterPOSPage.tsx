@@ -18,6 +18,7 @@ import {
   Trash2,
   Clock,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Receipt,
   Check,
@@ -43,6 +44,7 @@ export const CounterPOSPage: React.FC = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lowStockToast, setLowStockToast] = useState<string | null>(null);
 
   // Placed Order Success Modal
   const [placedOrderDetails, setPlacedOrderDetails] = useState<{
@@ -134,6 +136,36 @@ export const CounterPOSPage: React.FC = () => {
       );
     });
 
+    socket.on('MENU_AVAILABILITY_CHANGED', (data: { menuItemId: string; isAvailable: boolean }) => {
+      setMenuItems((prev) =>
+        prev.map((item) => (item.id === data.menuItemId ? { ...item, isAvailable: data.isAvailable } : item))
+      );
+    });
+
+    socket.on('STOCK_UPDATED', (data: { stockItemId: string; currentQuantity: number; lowStockThreshold: number; isLowStock: boolean; isOutOfStock: boolean }) => {
+      setMenuItems((prev) =>
+        prev.map((item) => {
+          if (item.stockItemId === data.stockItemId && item.stockItem) {
+            return {
+              ...item,
+              stockItem: {
+                ...item.stockItem,
+                currentQuantity: data.currentQuantity,
+                lowStockThreshold: data.lowStockThreshold,
+                isLowStock: data.isLowStock,
+                isOutOfStock: data.isOutOfStock
+              }
+            };
+          }
+          return item;
+        })
+      );
+    });
+
+    socket.on('STOCK_LOW_ALERT', (data: { stockItemId: string; stockItemName: string; currentQuantity: number; threshold: number }) => {
+      setLowStockToast(`Low Stock Alert: "${data.stockItemName}" has only ${data.currentQuantity} remaining!`);
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -168,10 +200,14 @@ export const CounterPOSPage: React.FC = () => {
   // Cart Item Handlers
   const handleAddToCart = (item: MenuItemDto) => {
     if (!item.isAvailable) return;
+    if (item.stockItem && item.stockItem.isOutOfStock) return;
     setCart((prev) => {
       const next = new Map(prev);
       const existing = next.get(item.id);
       if (existing) {
+        if (item.stockItem && existing.quantity >= item.stockItem.currentQuantity) {
+          return prev;
+        }
         next.set(item.id, { ...existing, quantity: existing.quantity + 1 });
       } else {
         next.set(item.id, { menuItem: item, quantity: 1, notes: '' });
@@ -369,6 +405,19 @@ export const CounterPOSPage: React.FC = () => {
           </div>
         )}
 
+        {/* Real-time Low Stock Warning Banner */}
+        {lowStockToast && (
+          <div className="mt-3 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-between text-xs sm:text-sm">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span>{lowStockToast}</span>
+            </div>
+            <button onClick={() => setLowStockToast(null)} className="text-xs font-bold text-amber-700 hover:underline">
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Search & Category Pills */}
         <div className="mt-4 space-y-3">
           <div className="relative max-w-md">
@@ -428,13 +477,16 @@ export const CounterPOSPage: React.FC = () => {
               {filteredItems.map((item) => {
                 const inCart = cart.get(item.id);
                 const quantity = inCart?.quantity || 0;
+                const isOutOfStock = Boolean(item.stockItem && item.stockItem.isOutOfStock);
+                const isLowStock = Boolean(item.stockItem && item.stockItem.isLowStock && !isOutOfStock);
+                const isItemUnavailable = !item.isAvailable || isOutOfStock;
 
                 return (
                   <div
                     key={item.id}
                     className={`bg-white rounded-xl border p-3.5 flex flex-col justify-between shadow-sm transition-all ${
-                      !item.isAvailable
-                        ? 'opacity-60 bg-slate-100 border-slate-200 cursor-not-allowed'
+                      isItemUnavailable
+                        ? 'opacity-65 bg-slate-100 border-slate-200'
                         : quantity > 0
                         ? 'border-orange-500 ring-1 ring-orange-500'
                         : 'border-slate-200 hover:border-slate-300'
@@ -445,11 +497,19 @@ export const CounterPOSPage: React.FC = () => {
                         <h3 className="font-semibold text-slate-900 text-sm sm:text-base leading-snug line-clamp-1">
                           {item.name}
                         </h3>
-                        {!item.isAvailable && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">
+                        {!item.isAvailable ? (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 whitespace-nowrap">
                             Unavailable
                           </span>
-                        )}
+                        ) : isOutOfStock ? (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 whitespace-nowrap flex items-center">
+                            <AlertTriangle className="w-3 h-3 mr-0.5" /> Out of Stock
+                          </span>
+                        ) : isLowStock ? (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap">
+                            Only {item.stockItem!.currentQuantity} left
+                          </span>
+                        ) : null}
                       </div>
 
                       {item.description && (
@@ -470,7 +530,7 @@ export const CounterPOSPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {item.isAvailable ? (
+                      {!isItemUnavailable ? (
                         quantity === 0 ? (
                           <button
                             onClick={() => handleAddToCart(item)}
@@ -493,7 +553,8 @@ export const CounterPOSPage: React.FC = () => {
                             </span>
                             <button
                               onClick={() => handleAddToCart(item)}
-                              className="w-7 h-7 rounded-md bg-orange-600 text-white hover:bg-orange-700 flex items-center justify-center font-bold text-sm shadow-xs"
+                              disabled={Boolean(item.stockItem && quantity >= item.stockItem.currentQuantity)}
+                              className="w-7 h-7 rounded-md bg-orange-600 text-white hover:bg-orange-700 flex items-center justify-center font-bold text-sm shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
                               aria-label="Increase quantity"
                             >
                               <Plus className="w-3.5 h-3.5" />
@@ -501,7 +562,9 @@ export const CounterPOSPage: React.FC = () => {
                           </div>
                         )
                       ) : (
-                        <span className="text-xs text-slate-400 font-medium">Sold Out</span>
+                        <span className="text-xs text-rose-600 font-semibold px-2 py-1 rounded bg-rose-50 border border-rose-100">
+                          {isOutOfStock ? 'Sold Out' : 'Unavailable'}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -548,55 +611,92 @@ export const CounterPOSPage: React.FC = () => {
         title={`Review Cart (${totalCartCount} items)`}
       >
         <div className="space-y-4">
+          {/* Cart Error Banner */}
+          {errorMessage && (
+            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {cartItemsList.some(
+            (c) => !c.menuItem.isAvailable || Boolean(c.menuItem.stockItem && c.menuItem.stockItem.isOutOfStock)
+          ) && (
+            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <span>
+                One or more items in the cart are currently unavailable or out of stock. Please remove them before checkout.
+              </span>
+            </div>
+          )}
+
           <div className="max-h-[50vh] overflow-y-auto divide-y divide-slate-100 pr-1">
-            {cartItemsList.map(({ menuItem, quantity, notes }) => (
-              <div key={menuItem.id} className="py-3 space-y-2">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h4 className="font-semibold text-slate-900 text-sm">{menuItem.name}</h4>
-                    <p className="text-xs text-slate-500">{formatPaise(menuItem.pricePaise)} each</p>
+            {cartItemsList.map(({ menuItem, quantity, notes }) => {
+              const isItemUnavailable =
+                !menuItem.isAvailable || Boolean(menuItem.stockItem && menuItem.stockItem.isOutOfStock);
+
+              return (
+                <div key={menuItem.id} className="py-3 space-y-2">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <h4 className="font-semibold text-slate-900 text-sm">{menuItem.name}</h4>
+                        {isItemUnavailable && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">
+                            Unavailable
+                          </span>
+                        )}
+                        {menuItem.stockItem && !isItemUnavailable && menuItem.stockItem.isLowStock && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                            Only {menuItem.stockItem.currentQuantity} left
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500">{formatPaise(menuItem.pricePaise)} each</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-bold text-slate-900 text-sm">
+                        {formatPaise(menuItem.pricePaise * quantity)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="font-bold text-slate-900 text-sm">
-                      {formatPaise(menuItem.pricePaise * quantity)}
-                    </span>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <input
+                      type="text"
+                      value={notes}
+                      onChange={(e) => handleUpdateNotes(menuItem.id, e.target.value)}
+                      placeholder="Item notes (e.g. less spicy)..."
+                      className="flex-1 text-xs px-2.5 py-1.5 rounded border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+                    />
+
+                    <div className="flex items-center space-x-1.5">
+                      <button
+                        onClick={() => handleDecreaseQuantity(menuItem.id)}
+                        className="w-7 h-7 rounded bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-xs font-bold text-slate-900 px-1">{quantity}</span>
+                      <button
+                        onClick={() => handleAddToCart(menuItem)}
+                        disabled={Boolean(menuItem.stockItem && quantity >= menuItem.stockItem.currentQuantity)}
+                        className="w-7 h-7 rounded bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 disabled:opacity-40"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleRemoveFromCart(menuItem.id)}
+                        className="p-1 text-slate-400 hover:text-rose-600 ml-1"
+                        title="Remove"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-
-                <div className="flex items-center justify-between gap-2">
-                  <input
-                    type="text"
-                    value={notes}
-                    onChange={(e) => handleUpdateNotes(menuItem.id, e.target.value)}
-                    placeholder="Item notes (e.g. less spicy)..."
-                    className="flex-1 text-xs px-2.5 py-1.5 rounded border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-                  />
-
-                  <div className="flex items-center space-x-1.5">
-                    <button
-                      onClick={() => handleDecreaseQuantity(menuItem.id)}
-                      className="w-7 h-7 rounded bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700"
-                    >
-                      <Minus className="w-3.5 h-3.5" />
-                    </button>
-                    <span className="text-xs font-bold text-slate-900 px-1">{quantity}</span>
-                    <button
-                      onClick={() => handleAddToCart(menuItem)}
-                      className="w-7 h-7 rounded bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleRemoveFromCart(menuItem.id)}
-                      className="p-1 text-slate-400 hover:text-rose-600 ml-1"
-                      title="Remove"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="border-t border-slate-200 pt-3 space-y-2">
@@ -619,7 +719,13 @@ export const CounterPOSPage: React.FC = () => {
             </button>
             <button
               onClick={handlePlaceOrder}
-              disabled={isPlacingOrder || cartItemsList.length === 0}
+              disabled={
+                isPlacingOrder ||
+                cartItemsList.length === 0 ||
+                cartItemsList.some(
+                  (c) => !c.menuItem.isAvailable || Boolean(c.menuItem.stockItem && c.menuItem.stockItem.isOutOfStock)
+                )
+              }
               className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-orange-600 hover:bg-orange-700 shadow-md transition-colors disabled:opacity-60 flex items-center justify-center space-x-2"
             >
               {isPlacingOrder ? (

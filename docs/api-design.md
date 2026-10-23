@@ -404,9 +404,109 @@
 
 ---
 
-## 7. Analytics & Reporting (Admin Only)
+## 7. Inventory & Operations API (Phase 5)
 
-### 7.1 Dashboard Sales Summary
+### 7.1 Inventory Overview
+* **GET** `/api/v1/inventory/overview`
+* **Auth**: `ADMIN`, `COUNTER`, `KITCHEN`
+* **Success (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "overview": {
+        "totalStockItems": 12,
+        "lowStockCount": 2,
+        "outOfStockCount": 1,
+        "healthyStockCount": 9,
+        "recentMovements": [ ... ]
+      }
+    }
+  }
+  ```
+
+### 7.2 List Stock Items
+* **GET** `/api/v1/inventory` (or `/api/v1/inventory/stock-items`)
+* **Auth**: `ADMIN`, `COUNTER`, `KITCHEN`
+* **Query Params**: `search` (string), `lowStockOnly` (boolean), `outOfStockOnly` (boolean)
+* **Success (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "items": [
+        {
+          "id": "uuid",
+          "name": "Burger Buns",
+          "unit": "portions",
+          "currentQuantity": 23,
+          "lowStockThreshold": 10,
+          "isLowStock": false,
+          "isOutOfStock": false,
+          "linkedMenuItemCount": 2,
+          "createdAt": "2026-10-23T20:47:19.272Z",
+          "updatedAt": "2026-10-23T20:48:00.000Z"
+        }
+      ]
+    }
+  }
+  ```
+
+### 7.3 Create Stock Item
+* **POST** `/api/v1/inventory` (or `/api/v1/inventory/stock-items`)
+* **Auth**: `ADMIN`
+* **Payload**:
+  ```json
+  {
+    "name": "Cold Brew Coffee",
+    "unit": "bottles",
+    "currentQuantity": 20,
+    "lowStockThreshold": 5
+  }
+  ```
+* **Success (201 Created)**
+
+### 7.4 Update Stock Item Configuration
+* **PUT** `/api/v1/inventory/:id` (or `/api/v1/inventory/stock-items/:id`)
+* **Auth**: `ADMIN`
+* **Payload**: `{ "name"?: string, "unit"?: string, "lowStockThreshold"?: number }`
+* **Success (200 OK)**
+
+### 7.5 Restock Inventory
+* **POST** `/api/v1/inventory/:id/restock`
+* **Auth**: `ADMIN`, `KITCHEN`
+* **Payload**:
+  ```json
+  {
+    "quantityAdded": 20,
+    "note": "Fresh morning delivery"
+  }
+  ```
+* **Success (200 OK)**: Returns updated stock item; generates `MANUAL_RESTOCK` movement ledger entry; emits real-time `STOCK_UPDATED` event.
+
+### 7.6 Manual Adjustment / Spoilage / Waste
+* **POST** `/api/v1/inventory/:id/adjust`
+* **Auth**: `ADMIN`
+* **Payload**:
+  ```json
+  {
+    "quantityChange": -2,
+    "reason": "Crushed in transit during delivery"
+  }
+  ```
+* **Validation**: `quantityChange != 0`, `currentQuantity + quantityChange >= 0`, `reason >= 3 chars`.
+* **Success (200 OK)**: Generates `MANUAL_ADJUSTMENT` movement ledger entry; emits real-time `STOCK_UPDATED` event.
+
+### 7.7 Movement Ledger
+* **GET** `/api/v1/inventory/movements?limit=100`
+* **Auth**: `ADMIN`
+* **Success (200 OK)**: Returns chronological immutable audit ledger with before/after quantities, staff actor, movement type, and notes.
+
+---
+
+## 8. Analytics & Reporting (Admin Only)
+
+### 8.1 Dashboard Sales Summary
 * **GET** `/api/v1/analytics/summary?period=today`
 * **Auth**: `ADMIN`
 * **Success (200 OK)**:
@@ -425,22 +525,22 @@
   }
   ```
 
-### 7.2 Daily Closing Report
+### 8.2 Daily Closing Report
 * **GET** `/api/v1/analytics/daily-closing?date=2026-10-23`
 * **Auth**: `ADMIN`
 * **Success (200 OK)**: Full closing report detailing order counts, sales breakdown, cancellations with reasons, and item performance.
 
 ---
 
-## 8. WebSocket (Socket.IO) Contract
+## 9. WebSocket (Socket.IO) Contract
 
-### 8.1 Connection & Room Auth
+### 9.1 Connection & Room Auth
 * Staff clients connect with `Authorization: Bearer <token>` or session cookie.
 * Customer clients connect and emit:
   `socket.emit('subscribe:order', { trackingToken })`
 * Server validates the tracking token and admits the socket strictly to `order:<orderId>`.
 
-### 8.2 Client Inbound / Server Outbound Events
+### 9.2 Client Inbound / Server Outbound Events
 
 ```typescript
 // Outbound from Server to Staff:Kitchen
@@ -468,5 +568,28 @@ interface OrderTimeAdjustedEvent {
   minutesAdded: number;
   newEstimatedCompletionAt: string;
   reason?: string;
+}
+
+// Outbound from Server to Staff:Admin & Staff:Counter (Phase 5 Inventory)
+interface StockUpdatedEvent {
+  stockItemId: string;
+  currentQuantity: number;
+  lowStockThreshold: number;
+  isLowStock: boolean;
+  isOutOfStock: boolean;
+}
+
+// Outbound from Server to Staff:Admin & Staff:Counter (Phase 5 Inventory)
+interface StockLowAlertEvent {
+  stockItemId: string;
+  stockItemName: string;
+  currentQuantity: number;
+  threshold: number;
+}
+
+// Outbound from Server to Staff:Admin & Staff:Counter (Phase 5 Menu Availability)
+interface MenuAvailabilityChangedEvent {
+  menuItemId: string;
+  isAvailable: boolean;
 }
 ```

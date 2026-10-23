@@ -17,7 +17,8 @@ import {
   CheckCircle2,
   ChefHat,
   Monitor,
-  Utensils
+  Utensils,
+  Boxes
 } from 'lucide-react';
 
 export const AdminStaffPage: React.FC = () => {
@@ -190,7 +191,7 @@ export const AdminStaffPage: React.FC = () => {
       <Navbar />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Navigation Tabs (Staff vs Menu) */}
+        {/* Navigation Tabs (Staff vs Menu vs Inventory) */}
         <div className="flex border-b border-slate-200 space-x-6 mb-6">
           <Link
             to="/admin/menu"
@@ -198,6 +199,13 @@ export const AdminStaffPage: React.FC = () => {
           >
             <Utensils className="w-4 h-4" />
             <span>Menu & Categories</span>
+          </Link>
+          <Link
+            to="/admin/inventory"
+            className="pb-3 text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center space-x-2"
+          >
+            <Boxes className="w-4 h-4" />
+            <span>Inventory & Stock</span>
           </Link>
           <Link
             to="/admin/staff"
