@@ -1,0 +1,59 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import { env } from './config/env.js';
+import { errorHandler } from './middleware/errorHandler.js';
+import { NotFoundError } from './utils/errors.js';
+import authRoutes from './modules/auth/auth.routes.js';
+import userRoutes from './modules/users/user.routes.js';
+import { sendSuccess } from './utils/response.js';
+
+export const createApp = () => {
+  const app = express();
+
+  // Security Headers
+  app.use(helmet());
+
+  // CORS Configuration
+  const allowedOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim());
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+        if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
+          callback(null, true);
+        } else {
+          callback(new Error(`Origin ${origin} not allowed by CORS`));
+        }
+      },
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Idempotency-Key']
+    })
+  );
+
+  // Request Body & Cookie Parsing
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+  app.use(cookieParser());
+
+  // Health check endpoint
+  app.get('/api/v1/health', (_req, res) => {
+    return sendSuccess(res, { status: 'healthy', timestamp: new Date().toISOString() });
+  });
+
+  // Feature Routes
+  app.use('/api/v1/auth', authRoutes);
+  app.use('/api/v1/users', userRoutes);
+
+  // 404 Catch-All
+  app.use((_req, _res, next) => {
+    next(new NotFoundError('The requested API resource does not exist.', 'ROUTE_NOT_FOUND'));
+  });
+
+  // Centralized Error Handling
+  app.use(errorHandler);
+
+  return app;
+};

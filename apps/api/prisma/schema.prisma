@@ -1,0 +1,190 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  COUNTER
+  KITCHEN
+}
+
+enum OrderStatus {
+  PLACED
+  PREPARING
+  PREPARED
+  COMPLETED
+  CANCELLED
+}
+
+enum InventoryMovementType {
+  ORDER_DEDUCTION
+  CANCELLATION_RESTORE
+  MANUAL_RESTOCK
+  MANUAL_ADJUSTMENT
+}
+
+model User {
+  id                   String                      @id @default(uuid())
+  email                String                      @unique
+  passwordHash         String
+  name                 String
+  role                 Role
+  isActive             Boolean                     @default(true)
+  tokenVersion         Int                         @default(1)
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  createdOrders        Order[]                     @relation("CreatedBy")
+  assignedOrders       Order[]                     @relation("AssignedTo")
+  statusHistoryEntries OrderStatusHistory[]
+  prepAdjustments      PreparationTimeAdjustment[]
+  inventoryMovements   InventoryMovement[]
+  auditLogs            AuditLog[]
+
+  @@index([role, isActive])
+}
+
+model Category {
+  id           String     @id @default(uuid())
+  name         String     @unique
+  displayOrder Int        @default(0)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  menuItems    MenuItem[]
+}
+
+model StockItem {
+  id                 String              @id @default(uuid())
+  name               String              @unique
+  unit               String
+  currentQuantity    Int                 @default(0)
+  lowStockThreshold  Int                 @default(10)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  menuItems          MenuItem[]
+  inventoryMovements InventoryMovement[]
+}
+
+model MenuItem {
+  id              String      @id @default(uuid())
+  categoryId      String
+  category        Category    @relation(fields: [categoryId], references: [id])
+  name            String
+  description     String?
+  pricePaise      Int
+  prepTimeMinutes Int         @default(10)
+  imageUrl        String?
+  isAvailable     Boolean     @default(true)
+  stockItemId     String?
+  stockItem       StockItem?  @relation(fields: [stockItemId], references: [id])
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  orderItems      OrderItem[]
+
+  @@index([categoryId, isAvailable])
+}
+
+model InventoryMovement {
+  id             String                @id @default(uuid())
+  stockItemId    String
+  stockItem      StockItem             @relation(fields: [stockItemId], references: [id])
+  quantityChange Int
+  type           InventoryMovementType
+  orderId        String?
+  order          Order?                @relation(fields: [orderId], references: [id])
+  performedById  String
+  performedBy    User                  @relation(fields: [performedById], references: [id])
+  note           String?
+  createdAt      DateTime              @default(now())
+}
+
+model Order {
+  id                      String                      @id @default(uuid())
+  dailyOrderNumber        String
+  orderDate               DateTime                    @default(now()) @db.Date
+  idempotencyKey          String                      @unique
+  status                  OrderStatus                 @default(PLACED)
+  totalPaise              Int
+  customerPinHash         String
+  initialEstimatedMinutes Int
+  preparationStartedAt    DateTime?
+  estimatedCompletionAt   DateTime?
+  preparedAt              DateTime?
+  completedAt             DateTime?
+  cancelledAt             DateTime?
+  cancellationReason      String?
+  createdById             String
+  createdBy               User                        @relation("CreatedBy", fields: [createdById], references: [id])
+  assignedToId            String?
+  assignedTo              User?                       @relation("AssignedTo", fields: [assignedToId], references: [id])
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
+  items                   OrderItem[]
+  statusHistory           OrderStatusHistory[]
+  prepAdjustments         PreparationTimeAdjustment[]
+  inventoryMovements      InventoryMovement[]
+
+  @@unique([orderDate, dailyOrderNumber])
+  @@index([status, createdAt])
+  @@index([assignedToId, status])
+}
+
+model OrderItem {
+  id                      String   @id @default(uuid())
+  orderId                 String
+  order                   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId              String
+  menuItem                MenuItem @relation(fields: [menuItemId], references: [id])
+  nameSnapshot            String
+  unitPricePaiseSnapshot  Int
+  prepTimeMinutesSnapshot Int
+  quantity                Int
+  subtotalPaise           Int
+  notes                   String?
+}
+
+model OrderStatusHistory {
+  id             String       @id @default(uuid())
+  orderId        String
+  order          Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  previousStatus OrderStatus?
+  newStatus      OrderStatus
+  changedById    String
+  changedBy      User         @relation(fields: [changedById], references: [id])
+  reason         String?
+  timestamp      DateTime     @default(now())
+}
+
+model PreparationTimeAdjustment {
+  id                            String   @id @default(uuid())
+  orderId                       String
+  order                         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  staffId                       String
+  staff                         User     @relation(fields: [staffId], references: [id])
+  minutesAdded                  Int
+  previousEstimatedCompletionAt DateTime
+  newEstimatedCompletionAt      DateTime
+  reason                        String?
+  createdAt                     DateTime @default(now())
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorId      String
+  actor        User     @relation(fields: [actorId], references: [id])
+  actorRole    Role
+  action       String
+  entityType   String
+  entityId     String
+  metadataJson Json?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+}
