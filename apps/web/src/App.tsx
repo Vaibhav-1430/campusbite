@@ -7,7 +7,7 @@ import { LoginPage } from './pages/LoginPage.js';
 import { AdminStaffPage } from './pages/admin/AdminStaffPage.js';
 import { AdminMenuPage } from './pages/admin/AdminMenuPage.js';
 import { CounterPOSPage } from './pages/counter/CounterPOSPage.js';
-import { KitchenShellPage } from './pages/kitchen/KitchenShellPage.js';
+import { KitchenKDSPage } from './pages/kitchen/KitchenKDSPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 
 export const App: React.FC = () => {
@@ -53,7 +53,7 @@ export const App: React.FC = () => {
             path="/kitchen"
             element={
               <ProtectedRoute allowedRoles={[Role.KITCHEN, Role.ADMIN]}>
-                <KitchenShellPage />
+                <KitchenKDSPage />
               </ProtectedRoute>
             }
           />

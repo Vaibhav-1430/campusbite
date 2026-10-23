@@ -23,6 +23,18 @@ export interface OrderStatusHistoryDto {
   timestamp: string;
 }
 
+export interface PrepAdjustmentDto {
+  id: string;
+  orderId: string;
+  staffId: string;
+  staffName?: string;
+  minutesAdded: number;
+  previousEstimatedCompletionAt: string;
+  newEstimatedCompletionAt: string;
+  reason: string | null;
+  createdAt: string;
+}
+
 export interface OrderDto {
   id: string;
   dailyOrderNumber: string;
@@ -45,9 +57,11 @@ export interface OrderDto {
   updatedAt: string;
   items: OrderItemDto[];
   statusHistory?: OrderStatusHistoryDto[];
+  prepAdjustments?: PrepAdjustmentDto[];
 }
 
 export interface CreateOrderResponseData {
   order: OrderDto;
   customerVerificationPin: string; // Plaintext PIN returned strictly in 201 response for counter staff
 }
+

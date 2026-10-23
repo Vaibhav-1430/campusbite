@@ -58,6 +58,7 @@ export const createApp = () => {
   app.use('/api/v1/categories', categoryRoutes);
   app.use('/api/v1/menu', menuRoutes);
   app.use('/api/v1/orders', orderRoutes);
+  app.use('/api/v1/kitchen/orders', orderRoutes);
 
   // 404 Catch-All
   app.use((_req, _res, next) => {

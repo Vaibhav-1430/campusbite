@@ -33,3 +33,21 @@ export const cancelOrderSchema = z.object({
 });
 
 export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;
+
+export const adjustPrepTimeSchema = z.object({
+  minutesAdded: z
+    .number({ required_error: 'Minutes added is required' })
+    .int('Minutes added must be an integer')
+    .min(1, 'Minutes added must be at least 1 minute')
+    .max(120, 'Cannot add more than 120 minutes at once'),
+  reason: z.string().trim().max(255).optional().nullable()
+});
+
+export type AdjustPrepTimeInput = z.infer<typeof adjustPrepTimeSchema>;
+
+export const assignOrderSchema = z.object({
+  staffId: z.string({ required_error: 'Staff ID is required' }).uuid('Invalid Staff ID')
+});
+
+export type AssignOrderInput = z.infer<typeof assignOrderSchema>;
+

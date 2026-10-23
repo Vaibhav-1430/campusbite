@@ -23,6 +23,7 @@ import {
   Check,
   History
 } from 'lucide-react';
+import { io, Socket } from 'socket.io-client';
 
 interface CartItem {
   menuItem: MenuItemDto;
@@ -99,8 +100,43 @@ export const CounterPOSPage: React.FC = () => {
   useEffect(() => {
     loadMenuData();
     loadActiveOrders();
-    const interval = setInterval(loadActiveOrders, 15000); // Poll every 15s for status updates
-    return () => clearInterval(interval);
+
+    const socket: Socket = io({
+      transports: ['websocket', 'polling'],
+      withCredentials: true
+    });
+
+    socket.on('ORDER_CREATED', () => {
+      loadActiveOrders();
+    });
+
+    socket.on('ORDER_PREPARING', (data: any) => {
+      setActiveOrders((prev) =>
+        prev.map((o) => (o.id === data.orderId ? { ...o, status: OrderStatus.PREPARING } : o))
+      );
+    });
+
+    socket.on('ORDER_PREPARED', (data: any) => {
+      setActiveOrders((prev) =>
+        prev.map((o) => (o.id === data.orderId ? { ...o, status: OrderStatus.PREPARED } : o))
+      );
+    });
+
+    socket.on('ORDER_COMPLETED', (data: any) => {
+      setActiveOrders((prev) =>
+        prev.map((o) => (o.id === data.orderId ? { ...o, status: OrderStatus.COMPLETED } : o))
+      );
+    });
+
+    socket.on('ORDER_CANCELLED', (data: any) => {
+      setActiveOrders((prev) =>
+        prev.map((o) => (o.id === data.orderId ? { ...o, status: OrderStatus.CANCELLED } : o))
+      );
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   // Filter Menu Items
@@ -725,11 +761,23 @@ export const CounterPOSPage: React.FC = () => {
                   <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 text-xs">
                     <span className="font-bold text-slate-900">{formatPaise(ord.totalPaise)}</span>
 
-                    <div className="space-x-2">
+                    <div className="flex items-center space-x-2">
+                      {ord.status === OrderStatus.PREPARING && (
+                        <span className="text-[11px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/60">
+                          Cooking in kitchen
+                        </span>
+                      )}
+
+                      {ord.status === OrderStatus.PLACED && (
+                        <span className="text-[11px] font-medium text-slate-400">
+                          Awaiting kitchen
+                        </span>
+                      )}
+
                       {ord.status === OrderStatus.PREPARED && (
                         <button
                           onClick={() => handleMarkHandover(ord.id)}
-                          className="px-2.5 py-1 rounded bg-emerald-600 text-white font-semibold hover:bg-emerald-700"
+                          className="px-2.5 py-1 rounded bg-emerald-600 text-white font-semibold hover:bg-emerald-700 shadow-sm transition-colors"
                         >
                           Hand Over
                         </button>
@@ -742,7 +790,7 @@ export const CounterPOSPage: React.FC = () => {
                             setCancelReason('');
                             setCancelError(null);
                           }}
-                          className="px-2.5 py-1 rounded bg-rose-50 text-rose-700 border border-rose-200 font-semibold hover:bg-rose-100"
+                          className="px-2.5 py-1 rounded bg-rose-50 text-rose-700 border border-rose-200 font-semibold hover:bg-rose-100 transition-colors"
                         >
                           Cancel
                         </button>

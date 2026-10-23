@@ -7,6 +7,20 @@ import { logAudit } from '../audit/audit.service.js';
 import { getNextDailyOrderNumber } from './sequence.service.js';
 import { getIO } from '../events/socket.js';
 
+const defaultOrderInclude = {
+  items: true,
+  createdBy: { select: { name: true } },
+  assignedTo: { select: { name: true } },
+  statusHistory: {
+    orderBy: { timestamp: 'asc' as const },
+    include: { changedBy: { select: { name: true } } }
+  },
+  prepAdjustments: {
+    orderBy: { createdAt: 'asc' as const },
+    include: { staff: { select: { name: true } } }
+  }
+};
+
 const sanitizeOrder = (order: any): OrderDto => ({
   id: order.id,
   dailyOrderNumber: order.dailyOrderNumber,
@@ -47,6 +61,17 @@ const sanitizeOrder = (order: any): OrderDto => ({
     changedByName: h.changedBy?.name,
     reason: h.reason,
     timestamp: h.timestamp.toISOString()
+  })),
+  prepAdjustments: (order.prepAdjustments || []).map((adj: any) => ({
+    id: adj.id,
+    orderId: adj.orderId,
+    staffId: adj.staffId,
+    staffName: adj.staff?.name,
+    minutesAdded: adj.minutesAdded,
+    previousEstimatedCompletionAt: adj.previousEstimatedCompletionAt.toISOString(),
+    newEstimatedCompletionAt: adj.newEstimatedCompletionAt.toISOString(),
+    reason: adj.reason,
+    createdAt: adj.createdAt.toISOString()
   }))
 });
 
@@ -59,11 +84,7 @@ export const createOrder = async (
   // 1. Check idempotency: if an order with this idempotencyKey already exists, return it
   const existingOrder = await prisma.order.findUnique({
     where: { idempotencyKey: input.idempotencyKey },
-    include: {
-      items: true,
-      createdBy: { select: { name: true } },
-      assignedTo: { select: { name: true } }
-    }
+    include: defaultOrderInclude
   });
 
   if (existingOrder) {
@@ -81,7 +102,6 @@ export const createOrder = async (
 
   const menuItemMap = new Map(menuItems.map((m) => [m.id, m]));
 
-  // Verify all items exist and are available
   for (const itemInput of input.items) {
     const menuItem = menuItemMap.get(itemInput.menuItemId);
     if (!menuItem) {
@@ -126,7 +146,6 @@ export const createOrder = async (
   const orderDate = new Date();
 
   const createdOrder = await prisma.$transaction(async (tx) => {
-    // Generate atomic sequence number (e.g. CB-101)
     const dailyOrderNumber = await getNextDailyOrderNumber(orderDate, tx);
 
     const order = await tx.order.create({
@@ -152,14 +171,7 @@ export const createOrder = async (
           }
         }
       },
-      include: {
-        items: true,
-        createdBy: { select: { name: true } },
-        assignedTo: { select: { name: true } },
-        statusHistory: {
-          include: { changedBy: { select: { name: true } } }
-        }
-      }
+      include: defaultOrderInclude
     });
 
     return order;
@@ -207,6 +219,7 @@ export const listOrders = async (filters: {
   status?: OrderStatus[];
   date?: string;
   limit?: number;
+  direction?: 'asc' | 'desc';
 } = {}): Promise<OrderDto[]> => {
   const where: any = {};
 
@@ -218,19 +231,13 @@ export const listOrders = async (filters: {
     where.orderDate = new Date(filters.date);
   }
 
+  const orderByDirection = filters.direction || 'desc';
+
   const orders = await prisma.order.findMany({
     where,
-    orderBy: { createdAt: 'desc' },
-    take: filters.limit || 50,
-    include: {
-      items: true,
-      createdBy: { select: { name: true } },
-      assignedTo: { select: { name: true } },
-      statusHistory: {
-        orderBy: { timestamp: 'asc' },
-        include: { changedBy: { select: { name: true } } }
-      }
-    }
+    orderBy: { createdAt: orderByDirection },
+    take: filters.limit || 100,
+    include: defaultOrderInclude
   });
 
   return orders.map(sanitizeOrder);
@@ -239,15 +246,7 @@ export const listOrders = async (filters: {
 export const getOrderById = async (id: string): Promise<OrderDto> => {
   const order = await prisma.order.findUnique({
     where: { id },
-    include: {
-      items: true,
-      createdBy: { select: { name: true } },
-      assignedTo: { select: { name: true } },
-      statusHistory: {
-        orderBy: { timestamp: 'asc' },
-        include: { changedBy: { select: { name: true } } }
-      }
-    }
+    include: defaultOrderInclude
   });
 
   if (!order) {
@@ -257,7 +256,156 @@ export const getOrderById = async (id: string): Promise<OrderDto> => {
   return sanitizeOrder(order);
 };
 
-export const markHandover = async (
+/**
+ * Claim an unassigned order by a kitchen staff member.
+ * Atomic conditional update prevents concurrent double-claiming.
+ */
+export const claimOrder = async (
+  id: string,
+  staffId: string,
+  role: Role,
+  ipAddress?: string
+): Promise<OrderDto> => {
+  const staff = await prisma.user.findUnique({
+    where: { id: staffId }
+  });
+
+  if (!staff || !staff.isActive) {
+    throw new ForbiddenError('Staff account is inactive or not found.', 'STAFF_INACTIVE');
+  }
+
+  // Atomic conditional update: only update if currently unassigned and eligible
+  const updateResult = await prisma.order.updateMany({
+    where: {
+      id,
+      assignedToId: null,
+      status: { in: [OrderStatus.PLACED, OrderStatus.PREPARING] }
+    },
+    data: {
+      assignedToId: staffId
+    }
+  });
+
+  if (updateResult.count === 0) {
+    const existing = await prisma.order.findUnique({
+      where: { id },
+      include: { assignedTo: { select: { name: true } } }
+    });
+
+    if (!existing) {
+      throw new NotFoundError('Order not found.', 'ORDER_NOT_FOUND');
+    }
+    if (existing.assignedToId) {
+      throw new BadRequestError(
+        `Order is already claimed by ${existing.assignedTo?.name || 'another staff member'}.`,
+        'ALREADY_CLAIMED'
+      );
+    }
+    throw new BadRequestError(
+      `Cannot claim order in "${existing.status}" status.`,
+      'INVALID_STATUS_FOR_CLAIM'
+    );
+  }
+
+  const updatedOrder = await prisma.order.findUniqueOrThrow({
+    where: { id },
+    include: defaultOrderInclude
+  });
+
+  await logAudit({
+    actorId: staffId,
+    actorRole: role,
+    action: 'ORDER_CLAIMED',
+    entityType: 'Order',
+    entityId: id,
+    metadata: { dailyOrderNumber: updatedOrder.dailyOrderNumber },
+    ipAddress
+  });
+
+  const io = getIO();
+  if (io) {
+    io.to('staff:kitchen').to('staff:counter').to('staff:admin').emit('ORDER_CLAIMED', {
+      orderId: updatedOrder.id,
+      dailyOrderNumber: updatedOrder.dailyOrderNumber,
+      assignedToId: staffId,
+      assignedToName: staff.name
+    });
+  }
+
+  return sanitizeOrder(updatedOrder);
+};
+
+/**
+ * Explicitly assign an order to a specific kitchen cook (Counter / Admin action).
+ */
+export const assignOrder = async (
+  id: string,
+  targetStaffId: string,
+  actorId: string,
+  role: Role,
+  ipAddress?: string
+): Promise<OrderDto> => {
+  const targetStaff = await prisma.user.findUnique({
+    where: { id: targetStaffId }
+  });
+
+  if (!targetStaff || !targetStaff.isActive || targetStaff.role !== Role.KITCHEN) {
+    throw new BadRequestError(
+      'Target staff member must be an active user with KITCHEN role.',
+      'INVALID_ASSIGNMENT_TARGET'
+    );
+  }
+
+  const order = await prisma.order.findUnique({ where: { id } });
+  if (!order) {
+    throw new NotFoundError('Order not found.', 'ORDER_NOT_FOUND');
+  }
+
+  if (order.status === OrderStatus.COMPLETED || order.status === OrderStatus.CANCELLED) {
+    throw new BadRequestError(
+      `Cannot assign order in "${order.status}" status.`,
+      'INVALID_STATUS_FOR_ASSIGNMENT'
+    );
+  }
+
+  const updatedOrder = await prisma.order.update({
+    where: { id },
+    data: { assignedToId: targetStaffId },
+    include: defaultOrderInclude
+  });
+
+  await logAudit({
+    actorId,
+    actorRole: role,
+    action: 'ORDER_ASSIGNED',
+    entityType: 'Order',
+    entityId: id,
+    metadata: {
+      dailyOrderNumber: updatedOrder.dailyOrderNumber,
+      assignedToId: targetStaffId,
+      assignedToName: targetStaff.name
+    },
+    ipAddress
+  });
+
+  const io = getIO();
+  if (io) {
+    io.to('staff:kitchen').to('staff:counter').to('staff:admin').emit('ORDER_ASSIGNED', {
+      orderId: updatedOrder.id,
+      dailyOrderNumber: updatedOrder.dailyOrderNumber,
+      assignedToId: targetStaffId,
+      assignedToName: targetStaff.name
+    });
+  }
+
+  return sanitizeOrder(updatedOrder);
+};
+
+/**
+ * Kitchen explicitly starts preparation. Authoritative countdown begins NOW.
+ * Atomic conditional update prevents race conditions with counter cancellations.
+ */
+export const startPreparation = async (
   id: string,
   staffId: string,
   role: Role,
@@ -271,44 +419,305 @@ export const markHandover = async (
     throw new NotFoundError('Order not found.', 'ORDER_NOT_FOUND');
   }
 
-  if (order.status !== OrderStatus.PREPARED) {
+  const preparationStartedAt = new Date();
+  const estimatedCompletionAt = new Date(
+    preparationStartedAt.getTime() + order.initialEstimatedMinutes * 60 * 1000
+  );
+
+  // Atomic conditional update: ONLY start if status is still PLACED
+  const updateResult = await prisma.order.updateMany({
+    where: {
+      id,
+      status: OrderStatus.PLACED
+    },
+    data: {
+      status: OrderStatus.PREPARING,
+      preparationStartedAt,
+      estimatedCompletionAt,
+      // If unassigned, automatically assign to cook starting prep
+      assignedToId: order.assignedToId || staffId
+    }
+  });
+
+  if (updateResult.count === 0) {
+    const current = await prisma.order.findUnique({ where: { id } });
+    if (!current) throw new NotFoundError('Order not found.', 'ORDER_NOT_FOUND');
+    if (current.status === OrderStatus.CANCELLED) {
+      throw new BadRequestError('Cannot start preparation: order was cancelled.', 'ORDER_ALREADY_CANCELLED');
+    }
+    if (current.status === OrderStatus.PREPARING) {
+      throw new BadRequestError('Order is already in preparation.', 'ALREADY_PREPARING');
+    }
     throw new BadRequestError(
-      `Cannot hand over order in "${order.status}" status. Order must be PREPARED first.`,
+      `Cannot start preparation from "${current.status}" status.`,
+      'INVALID_STATUS_TRANSITION'
+    );
+  }
+
+  // Record status transition in history
+  await prisma.orderStatusHistory.create({
+    data: {
+      orderId: id,
+      previousStatus: OrderStatus.PLACED,
+      newStatus: OrderStatus.PREPARING,
+      changedById: staffId,
+      reason: 'Kitchen began cooking preparation'
+    }
+  });
+
+  const updatedOrder = await prisma.order.findUniqueOrThrow({
+    where: { id },
+    include: defaultOrderInclude
+  });
+
+  await logAudit({
+    actorId: staffId,
+    actorRole: role,
+    action: 'ORDER_PREPARATION_STARTED',
+    entityType: 'Order',
+    entityId: id,
+    metadata: {
+      dailyOrderNumber: updatedOrder.dailyOrderNumber,
+      preparationStartedAt: preparationStartedAt.toISOString(),
+      estimatedCompletionAt: estimatedCompletionAt.toISOString()
+    },
+    ipAddress
+  });
+
+  const io = getIO();
+  if (io) {
+    io.to('staff:kitchen').to('staff:counter').to('staff:admin').emit('ORDER_PREPARING', {
+      orderId: updatedOrder.id,
+      dailyOrderNumber: updatedOrder.dailyOrderNumber,
+      preparationStartedAt: preparationStartedAt.toISOString(),
+      estimatedCompletionAt: estimatedCompletionAt.toISOString(),
+      initialEstimatedMinutes: updatedOrder.initialEstimatedMinutes,
+      assignedToId: updatedOrder.assignedToId,
+      assignedToName: updatedOrder.assignedTo?.name
+    });
+  }
+
+  return sanitizeOrder(updatedOrder);
+};
+
+/**
+ * Add preparation time while an order is preparing (+1, +3, +5, custom minutes).
+ * Authoritatively recalculates estimated completion and logs the adjustment.
+ */
+export const adjustPreparationTime = async (
+  id: string,
+  minutesAdded: number,
+  reason: string | null | undefined,
+  staffId: string,
+  role: Role,
+  ipAddress?: string
+): Promise<OrderDto> => {
+  if (!Number.isInteger(minutesAdded) || minutesAdded <= 0 || minutesAdded > 120) {
+    throw new BadRequestError(
+      'Minutes added must be a positive integer between 1 and 120.',
+      'INVALID_MINUTES_ADDED'
+    );
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id }
+  });
+
+  if (!order) {
+    throw new NotFoundError('Order not found.', 'ORDER_NOT_FOUND');
+  }
+
+  if (order.status !== OrderStatus.PREPARING) {
+    throw new BadRequestError(
+      `Cannot adjust preparation time for order in "${order.status}" status. Order must be PREPARING.`,
+      'INVALID_STATUS_FOR_TIME_ADJUSTMENT'
+    );
+  }
+
+  const baseEstimate = order.estimatedCompletionAt
+    ? new Date(order.estimatedCompletionAt)
+    : new Date(order.preparationStartedAt!.getTime() + order.initialEstimatedMinutes * 60 * 1000);
+
+  const newEstimatedCompletionAt = new Date(baseEstimate.getTime() + minutesAdded * 60 * 1000);
+
+  const updatedOrder = await prisma.$transaction(async (tx) => {
+    await tx.preparationTimeAdjustment.create({
+      data: {
+        orderId: id,
+        staffId,
+        minutesAdded,
+        previousEstimatedCompletionAt: baseEstimate,
+        newEstimatedCompletionAt,
+        reason: reason?.trim() || null
+      }
+    });
+
+    const updated = await tx.order.update({
+      where: { id },
+      data: {
+        estimatedCompletionAt: newEstimatedCompletionAt
+      },
+      include: defaultOrderInclude
+    });
+
+    return updated;
+  });
+
+  await logAudit({
+    actorId: staffId,
+    actorRole: role,
+    action: 'PREP_TIME_ADJUSTED',
+    entityType: 'Order',
+    entityId: id,
+    metadata: {
+      dailyOrderNumber: updatedOrder.dailyOrderNumber,
+      minutesAdded,
+      previousEstimatedCompletionAt: baseEstimate.toISOString(),
+      newEstimatedCompletionAt: newEstimatedCompletionAt.toISOString(),
+      reason
+    },
+    ipAddress
+  });
+
+  const io = getIO();
+  if (io) {
+    io.to('staff:kitchen').to('staff:counter').to('staff:admin').emit('ORDER_TIME_ADJUSTED', {
+      orderId: updatedOrder.id,
+      dailyOrderNumber: updatedOrder.dailyOrderNumber,
+      minutesAdded,
+      newEstimatedCompletionAt: newEstimatedCompletionAt.toISOString(),
+      reason
+    });
+  }
+
+  return sanitizeOrder(updatedOrder);
+};
+
+/**
+ * Kitchen cook finishes cooking: transitions to PREPARED.
+ * Signals counter staff that order is ready for customer handover.
+ */
+export const markPrepared = async (
+  id: string,
+  staffId: string,
+  role: Role,
+  ipAddress?: string
+): Promise<OrderDto> => {
+  const preparedAt = new Date();
+
+  // Atomic conditional update: order must be PREPARING
+  const updateResult = await prisma.order.updateMany({
+    where: {
+      id,
+      status: OrderStatus.PREPARING
+    },
+    data: {
+      status: OrderStatus.PREPARED,
+      preparedAt
+    }
+  });
+
+  if (updateResult.count === 0) {
+    const current = await prisma.order.findUnique({ where: { id } });
+    if (!current) throw new NotFoundError('Order not found.', 'ORDER_NOT_FOUND');
+    if (current.status === OrderStatus.PREPARED) {
+      throw new BadRequestError('Order is already marked PREPARED.', 'ALREADY_PREPARED');
+    }
+    throw new BadRequestError(
+      `Cannot mark prepared from "${current.status}" status. Order must be PREPARING.`,
+      'INVALID_STATUS_TRANSITION'
+    );
+  }
+
+  await prisma.orderStatusHistory.create({
+    data: {
+      orderId: id,
+      previousStatus: OrderStatus.PREPARING,
+      newStatus: OrderStatus.PREPARED,
+      changedById: staffId,
+      reason: 'Kitchen cooking complete; ready for pickup'
+    }
+  });
+
+  const updatedOrder = await prisma.order.findUniqueOrThrow({
+    where: { id },
+    include: defaultOrderInclude
+  });
+
+  await logAudit({
+    actorId: staffId,
+    actorRole: role,
+    action: 'ORDER_PREPARED',
+    entityType: 'Order',
+    entityId: id,
+    metadata: {
+      dailyOrderNumber: updatedOrder.dailyOrderNumber,
+      preparedAt: preparedAt.toISOString()
+    },
+    ipAddress
+  });
+
+  const io = getIO();
+  if (io) {
+    io.to('staff:kitchen').to('staff:counter').to('staff:admin').emit('ORDER_PREPARED', {
+      orderId: updatedOrder.id,
+      dailyOrderNumber: updatedOrder.dailyOrderNumber,
+      preparedAt: preparedAt.toISOString()
+    });
+  }
+
+  return sanitizeOrder(updatedOrder);
+};
+
+/**
+ * Counter marks order handed over to customer.
+ * Enforces requirement: order must be PREPARED before it can be COMPLETED.
+ */
+export const markHandover = async (
+  id: string,
+  staffId: string,
+  role: Role,
+  ipAddress?: string
+): Promise<OrderDto> => {
+  const completedAt = new Date();
+
+  // Atomic conditional update: must be in PREPARED status
+  const updateResult = await prisma.order.updateMany({
+    where: {
+      id,
+      status: OrderStatus.PREPARED
+    },
+    data: {
+      status: OrderStatus.COMPLETED,
+      completedAt
+    }
+  });
+
+  if (updateResult.count === 0) {
+    const current = await prisma.order.findUnique({ where: { id } });
+    if (!current) throw new NotFoundError('Order not found.', 'ORDER_NOT_FOUND');
+    if (current.status === OrderStatus.COMPLETED) {
+      throw new BadRequestError('Order is already completed.', 'ALREADY_COMPLETED');
+    }
+    throw new BadRequestError(
+      `Cannot hand over order in "${current.status}" status. Order must be PREPARED first.`,
       'INVALID_STATUS_FOR_HANDOVER'
     );
   }
 
-  const completedAt = new Date();
+  await prisma.orderStatusHistory.create({
+    data: {
+      orderId: id,
+      previousStatus: OrderStatus.PREPARED,
+      newStatus: OrderStatus.COMPLETED,
+      changedById: staffId,
+      reason: 'Order handed over to customer at counter'
+    }
+  });
 
-  const updatedOrder = await prisma.$transaction(async (tx) => {
-    const updated = await tx.order.update({
-      where: { id },
-      data: {
-        status: OrderStatus.COMPLETED,
-        completedAt
-      },
-      include: {
-        items: true,
-        createdBy: { select: { name: true } },
-        assignedTo: { select: { name: true } },
-        statusHistory: {
-          orderBy: { timestamp: 'asc' },
-          include: { changedBy: { select: { name: true } } }
-        }
-      }
-    });
-
-    await tx.orderStatusHistory.create({
-      data: {
-        orderId: id,
-        previousStatus: OrderStatus.PREPARED,
-        newStatus: OrderStatus.COMPLETED,
-        changedById: staffId,
-        reason: 'Order handed over to customer at counter'
-      }
-    });
-
-    return updated;
+  const updatedOrder = await prisma.order.findUniqueOrThrow({
+    where: { id },
+    include: defaultOrderInclude
   });
 
   await logAudit({
@@ -323,7 +732,7 @@ export const markHandover = async (
 
   const io = getIO();
   if (io) {
-    io.to('staff:counter').to('staff:admin').emit('ORDER_COMPLETED', {
+    io.to('staff:counter').to('staff:kitchen').to('staff:admin').emit('ORDER_COMPLETED', {
       orderId: updatedOrder.id,
       dailyOrderNumber: updatedOrder.dailyOrderNumber,
       completedAt: completedAt.toISOString()
@@ -333,6 +742,14 @@ export const markHandover = async (
   return sanitizeOrder(updatedOrder);
 };
 
+/**
+ * Cancel an order with mandatory reason.
+ * Enforces cancellation policy:
+ * - Counter can ONLY cancel PLACED orders.
+ * - Admin can cancel PLACED or PREPARING orders.
+ * - Kitchen staff CANNOT cancel orders.
+ * Handled with atomic conditional updates to prevent race condition if kitchen starts preparing.
+ */
 export const cancelOrder = async (
   id: string,
   reason: string,
@@ -340,62 +757,65 @@ export const cancelOrder = async (
   role: Role,
   ipAddress?: string
 ): Promise<OrderDto> => {
-  const order = await prisma.order.findUnique({
-    where: { id }
-  });
-
-  if (!order) {
-    throw new NotFoundError('Order not found.', 'ORDER_NOT_FOUND');
+  if (!reason || reason.trim().length < 3) {
+    throw new BadRequestError('A non-empty cancellation reason (min 3 chars) is required.', 'REASON_REQUIRED');
   }
 
-  if (order.status === OrderStatus.COMPLETED || order.status === OrderStatus.CANCELLED) {
-    throw new BadRequestError(
-      `Order cannot be cancelled because it is already in "${order.status}" status.`,
-      'ORDER_CANNOT_BE_CANCELLED'
-    );
-  }
-
-  // Authorization rule:
-  // Counter staff can only cancel orders in PLACED status
-  if (role === Role.COUNTER && order.status !== OrderStatus.PLACED) {
-    throw new ForbiddenError(
-      `Counter staff can only cancel orders in PLACED status. This order is ${order.status}. Contact an administrator.`,
-      'CANCEL_PERMISSION_DENIED'
-    );
+  if (role === Role.KITCHEN) {
+    throw new ForbiddenError('Kitchen staff are not authorized to cancel orders.', 'CANCEL_PERMISSION_DENIED');
   }
 
   const cancelledAt = new Date();
+  const eligibleStatuses = role === Role.COUNTER
+    ? [OrderStatus.PLACED]
+    : [OrderStatus.PLACED, OrderStatus.PREPARING];
 
-  const updatedOrder = await prisma.$transaction(async (tx) => {
-    const updated = await tx.order.update({
-      where: { id },
-      data: {
-        status: OrderStatus.CANCELLED,
-        cancelledAt,
-        cancellationReason: reason
-      },
-      include: {
-        items: true,
-        createdBy: { select: { name: true } },
-        assignedTo: { select: { name: true } },
-        statusHistory: {
-          orderBy: { timestamp: 'asc' },
-          include: { changedBy: { select: { name: true } } }
-        }
-      }
-    });
+  const updateResult = await prisma.order.updateMany({
+    where: {
+      id,
+      status: { in: eligibleStatuses }
+    },
+    data: {
+      status: OrderStatus.CANCELLED,
+      cancelledAt,
+      cancellationReason: reason.trim()
+    }
+  });
 
-    await tx.orderStatusHistory.create({
-      data: {
-        orderId: id,
-        previousStatus: order.status,
-        newStatus: OrderStatus.CANCELLED,
-        changedById: staffId,
-        reason
-      }
-    });
+  if (updateResult.count === 0) {
+    const current = await prisma.order.findUnique({ where: { id } });
+    if (!current) throw new NotFoundError('Order not found.', 'ORDER_NOT_FOUND');
+    if (current.status === OrderStatus.CANCELLED) {
+      throw new BadRequestError('Order is already cancelled.', 'ALREADY_CANCELLED');
+    }
+    if (current.status === OrderStatus.COMPLETED) {
+      throw new BadRequestError('Cannot cancel an order that has already been handed over.', 'ALREADY_COMPLETED');
+    }
+    if (role === Role.COUNTER && current.status === OrderStatus.PREPARING) {
+      throw new BadRequestError(
+        'Cannot cancel: kitchen has already begun preparing this order. Contact an administrator.',
+        'ORDER_ALREADY_PREPARING'
+      );
+    }
+    throw new BadRequestError(
+      `Cannot cancel order in "${current.status}" status.`,
+      'INVALID_STATUS_FOR_CANCELLATION'
+    );
+  }
 
-    return updated;
+  await prisma.orderStatusHistory.create({
+    data: {
+      orderId: id,
+      previousStatus: eligibleStatuses.length === 1 ? OrderStatus.PLACED : OrderStatus.PREPARING,
+      newStatus: OrderStatus.CANCELLED,
+      changedById: staffId,
+      reason: reason.trim()
+    }
+  });
+
+  const updatedOrder = await prisma.order.findUniqueOrThrow({
+    where: { id },
+    include: defaultOrderInclude
   });
 
   await logAudit({
@@ -406,7 +826,7 @@ export const cancelOrder = async (
     entityId: id,
     metadata: {
       dailyOrderNumber: updatedOrder.dailyOrderNumber,
-      reason,
+      reason: reason.trim(),
       cancelledByRole: role
     },
     ipAddress
@@ -417,7 +837,7 @@ export const cancelOrder = async (
     io.to('staff:kitchen').to('staff:counter').to('staff:admin').emit('ORDER_CANCELLED', {
       orderId: updatedOrder.id,
       dailyOrderNumber: updatedOrder.dailyOrderNumber,
-      reason,
+      reason: reason.trim(),
       cancelledAt: cancelledAt.toISOString()
     });
   }
