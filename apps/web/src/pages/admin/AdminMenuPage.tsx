@@ -29,7 +29,8 @@ import {
   Eye,
   EyeOff,
   Clock,
-  Boxes
+  Boxes,
+  BarChart3
 } from 'lucide-react';
 
 export const AdminMenuPage: React.FC = () => {
@@ -281,10 +282,17 @@ export const AdminMenuPage: React.FC = () => {
           </Link>
           <Link
             to="/admin/staff"
-            className="pb-3 text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center space-x-2"
+            className="pb-3 text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center space-x-2 whitespace-nowrap"
           >
             <Users className="w-4 h-4" />
             <span>Staff Management</span>
+          </Link>
+          <Link
+            to="/admin/analytics"
+            className="pb-3 text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center space-x-2 whitespace-nowrap"
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Analytics & Reports</span>
           </Link>
         </div>
 

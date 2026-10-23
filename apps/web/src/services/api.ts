@@ -52,3 +52,34 @@ export async function apiRequest<T>(
 
   return (json as { success: true; data: T }).data;
 }
+
+export async function downloadCsv(endpoint: string, filename: string): Promise<void> {
+  const url = `${API_BASE_URL}${endpoint}`;
+  const response = await fetch(url, {
+    credentials: 'include'
+  });
+
+  if (!response.ok) {
+    let msg = `Failed to download report (${response.status})`;
+    try {
+      const errJson = await response.json();
+      if (errJson?.error?.message) {
+        msg = errJson.error.message;
+      }
+    } catch {
+      // Keep default msg
+    }
+    throw new ApiError(msg, 'DOWNLOAD_ERROR', response.status);
+  }
+
+  const blob = await response.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(downloadUrl);
+}
+

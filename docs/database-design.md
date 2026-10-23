@@ -432,3 +432,19 @@ model AuditLog {
   @@index([entityType, entityId])
 }
 ```
+
+---
+
+## 4. Phase 6 Analytics Indexing Strategy & Query Optimization
+
+To ensure real-time analytics aggregation scales gracefully without full-table scans, the following composite and single-column indexes were added in Phase 6:
+
+1. **`Order(createdAt)` and `Order(orderDate)`**:
+   - `@@index([createdAt])`: Enables sub-millisecond filtering on date ranges (`createdAt >= start AND createdAt <= end`) for sales summaries and daily trends.
+   - `@@index([orderDate])`: Accelerates daily closing report calculations for specific target dates.
+2. **`OrderItem(orderId)` and `OrderItem(menuItemId)`**:
+   - `@@index([orderId])`: Optimizes joins between orders and line items.
+   - `@@index([menuItemId])`: Accelerates grouping and ranking by menu item for menu performance reporting.
+3. **`InventoryMovement(createdAt)`**:
+   - `@@index([createdAt])`: Accelerates time-window queries on the immutable movement ledger for restock, wastage, deduction, and restoration aggregation.
+

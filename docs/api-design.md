@@ -593,3 +593,174 @@ interface MenuAvailabilityChangedEvent {
   isAvailable: boolean;
 }
 ```
+
+---
+
+## 10. Analytics & Reporting Endpoints (Phase 6)
+
+All analytics endpoints require authentication and strict **`ADMIN`** role authorization (`Role.ADMIN`).
+
+### 10.1 Sales Summary & Trends
+* **GET** `/api/v1/analytics/summary`
+* **Query Parameters**:
+  * `startDate` (ISO `YYYY-MM-DD`, required)
+  * `endDate` (ISO `YYYY-MM-DD`, required)
+* **Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "startDate": "2026-10-01",
+      "endDate": "2026-10-24",
+      "totalOrders": 140,
+      "completedOrders": 132,
+      "cancelledOrders": 5,
+      "activeOrders": 3,
+      "grossSalesPaise": 2100000,
+      "completedSalesPaise": 1980000,
+      "cancelledSalesPaise": 75000,
+      "averageOrderValuePaise": 15000,
+      "dailyTrends": [
+        {
+          "date": "2026-10-24",
+          "totalOrders": 15,
+          "completedOrders": 14,
+          "cancelledOrders": 1,
+          "grossSalesPaise": 225000,
+          "completedSalesPaise": 210000
+        }
+      ]
+    }
+  }
+  ```
+
+### 10.2 Menu Item Performance
+* **GET** `/api/v1/analytics/menu-performance`
+* **Query Parameters**: `startDate`, `endDate` (ISO `YYYY-MM-DD`, required)
+* **Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "items": [
+        {
+          "menuItemId": "uuid",
+          "name": "Classic Burger",
+          "categoryName": "Burgers",
+          "quantityOrdered": 65,
+          "quantityFulfilled": 62,
+          "quantityCancelled": 3,
+          "cancellationRatePercent": 4.6,
+          "totalRevenuePaise": 620000
+        }
+      ]
+    }
+  }
+  ```
+
+### 10.3 Kitchen Turnaround Performance
+* **GET** `/api/v1/analytics/kitchen-performance`
+* **Query Parameters**: `startDate`, `endDate` (ISO `YYYY-MM-DD`, required)
+* **Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "totalPreparedOrders": 132,
+      "averageActualPrepMinutes": 8.4,
+      "averageEstimatedPrepMinutes": 10.0,
+      "onTimeOrdersCount": 124,
+      "delayedOrdersCount": 8,
+      "onTimePercentage": 93.9,
+      "averageDelayMinutes": 3.2
+    }
+  }
+  ```
+
+### 10.4 Inventory & Movements Report
+* **GET** `/api/v1/analytics/inventory`
+* **Query Parameters**: `startDate`, `endDate` (ISO `YYYY-MM-DD`, required)
+* **Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "totalRestockedUnits": 150,
+      "totalAdjustedUnits": -5,
+      "totalWastedUnits": 5,
+      "totalDeductedUnits": 120,
+      "totalRestoredUnits": 4,
+      "currentLowStockCount": 2,
+      "currentOutOfStockCount": 0,
+      "currentHealthyStockCount": 18,
+      "itemSummaries": [
+        {
+          "stockItemId": "uuid",
+          "name": "Burger Patty",
+          "unit": "portions",
+          "currentQuantity": 45,
+          "lowStockThreshold": 10,
+          "restockedUnits": 50,
+          "wastedUnits": 2,
+          "adjustedUnits": -2,
+          "deductedUnits": 40,
+          "restoredUnits": 1
+        }
+      ]
+    }
+  }
+  ```
+
+### 10.5 Daily Closing Register Snapshot
+* **GET** `/api/v1/analytics/daily-closing`
+* **Query Parameters**: `date` (ISO `YYYY-MM-DD`, optional, defaults to current date)
+* **Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "reportDate": "2026-10-24",
+      "timezone": "Asia/Kolkata",
+      "generatedAt": "2026-10-24T02:44:40.000Z",
+      "orders": {
+        "totalPlaced": 15,
+        "completed": 14,
+        "cancelled": 1,
+        "active": 0
+      },
+      "financials": {
+        "grossRecordedPaise": 225000,
+        "completedSalesPaise": 210000,
+        "cancelledSalesPaise": 15000,
+        "averageOrderValuePaise": 15000,
+        "cancelledOrderTreatment": "Cancelled tickets are tracked in gross volume and audit history, but strictly deducted from completed sales revenue."
+      },
+      "topSellingItems": [
+        { "name": "Classic Burger", "quantityFulfilled": 12, "totalRevenuePaise": 120000 }
+      ],
+      "kitchen": {
+        "ordersPrepared": 14,
+        "averagePrepMinutes": 8.2,
+        "delayedOrders": 1
+      },
+      "inventory": {
+        "restockedUnits": 20,
+        "wastedUnits": 1,
+        "restoredUnits": 1,
+        "deductedUnits": 18,
+        "restockNotes": [{ "stockItemName": "Burger Patty", "quantity": 20, "note": "Morning batch" }],
+        "wasteNotes": [{ "stockItemName": "Burger Patty", "quantity": 1, "reason": "Burnt on grill" }]
+      }
+    }
+  }
+  ```
+
+### 10.6 CSV Export Endpoints
+* **GET** `/api/v1/analytics/export/sales?startDate=...&endDate=...`
+* **GET** `/api/v1/analytics/export/menu?startDate=...&endDate=...`
+* **GET** `/api/v1/analytics/export/daily-closing?date=...`
+* **Response Headers**:
+  * `Content-Type: text/csv; charset=utf-8`
+  * `Content-Disposition: attachment; filename="campusbite-....csv"`
+* **Formatting**: RFC 4180 compliant with double-quote escaping for commas and quotes.
+

@@ -105,6 +105,7 @@ model InventoryMovement {
   createdAt        DateTime              @default(now())
 
   @@index([stockItemId, createdAt])
+  @@index([createdAt])
 }
 
 model Order {
@@ -136,6 +137,8 @@ model Order {
   @@unique([orderDate, dailyOrderNumber])
   @@index([status, createdAt])
   @@index([assignedToId, status])
+  @@index([createdAt])
+  @@index([orderDate])
 }
 
 model OrderItem {
@@ -150,6 +153,9 @@ model OrderItem {
   quantity                Int
   subtotalPaise           Int
   notes                   String?
+
+  @@index([orderId])
+  @@index([menuItemId])
 }
 
 model OrderStatusHistory {

@@ -183,10 +183,11 @@ gantt
 * **Testing & Verification**:
   - Financial verification test: Calculating gross and net revenue across mixed completed and cancelled test orders, verifying accurate paise math.
 * **Acceptance Criteria**:
-  1. Analytics dashboard displays correct revenue figures without floating-point errors.
-  2. Cancelled orders are excluded from net sales.
-  3. Daily closing report aggregates all shift totals accurately.
-  4. Charts render cleanly on both mobile and desktop.
+  1. Analytics dashboard displays correct revenue figures without floating-point errors. [PASS]
+  2. Cancelled orders are excluded from net sales. [PASS]
+  3. Daily closing report aggregates all shift totals accurately. [PASS]
+  4. Charts and tabular reports render cleanly on both mobile and desktop. [PASS]
+  5. CSV export complies with RFC 4180 escaping and role-based permissions. [PASS]
 
 ---
 

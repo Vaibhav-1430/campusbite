@@ -9,6 +9,7 @@ import { PublicDisplayBoardPage } from './pages/display/PublicDisplayBoardPage.j
 import { AdminStaffPage } from './pages/admin/AdminStaffPage.js';
 import { AdminMenuPage } from './pages/admin/AdminMenuPage.js';
 import { AdminInventoryPage } from './pages/admin/AdminInventoryPage.js';
+import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage.js';
 import { CounterPOSPage } from './pages/counter/CounterPOSPage.js';
 import { KitchenKDSPage } from './pages/kitchen/KitchenKDSPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
@@ -51,6 +52,14 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute allowedRoles={[Role.ADMIN]}>
                 <AdminStaffPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/analytics"
+            element={
+              <ProtectedRoute allowedRoles={[Role.ADMIN]}>
+                <AdminAnalyticsPage />
               </ProtectedRoute>
             }
           />
