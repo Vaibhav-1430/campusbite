@@ -116,26 +116,29 @@ gantt
 
 ---
 
-### Phase 4 — Customer Tracking
+### Phase 4 — Customer Tracking & Public Display Board [COMPLETED & VERIFIED]
 * **Scope**:
-  - Permanent public tracking route `/track`.
+  - Permanent public tracking route `/track` and pre-filled `/track/:orderNumber`.
+  - Public Cafeteria TV display board `/board` and `/display`.
   - Responsive mobile verification form: Daily Order Number + 4-digit PIN.
-  - Rate-limited verification endpoint preventing brute-force PIN guessing.
-  - Real-time order progress stepper: Placed → Preparing → Ready for Collection → Handed Over.
-  - Live remaining preparation countdown derived from server timestamp.
-  - Dynamic updates when kitchen adds time.
-  - Celebratory high-contrast "Ready for Pickup!" notification banner when status is `PREPARED`.
-  - Strict privacy filter: zero leakage of staff names, other tickets, or internal revenue data.
-  - Universal QR code generation widget for admin to download/print.
+  - Rate-limited verification endpoint preventing brute-force PIN guessing (10 attempts/min per IP, HTTP 429).
+  - Real-time order progress stepper: Placed → Preparing (Cooking) → Ready for Collection → Handed Over.
+  - Authoritative preparation countdown derived from server timestamp (`estimatedCompletionAt`), starting strictly when kitchen begins preparation.
+  - Dynamic updates when kitchen adds time (`ORDER_TIME_ADJUSTED`).
+  - Celebratory high-contrast "Ready for Pickup!" notification card when status is `PREPARED` with cheerful Web Audio chime and optional browser notification.
+  - Strict privacy filter: zero leakage of staff names, pin hashes, other tickets, or paise pricing.
+  - Universal QR code generation modal with PNG download and print support.
 * **Testing & Verification**:
   - Public endpoint security tests verifying no unauthorized fields are returned.
   - Rate-limiting verification (exceeding attempts triggers 429 Too Many Requests).
-  - Responsive mobile testing across viewports (iPhone SE 375px, Android 360px, iPad 768px).
+  - Reconnection and refresh state recovery tests ensuring zero timer drift.
+  - Responsive mobile browser verification across viewport sizes.
 * **Acceptance Criteria**:
-  1. Customer scans universal QR, inputs order number + PIN, and views their order.
-  2. Customer sees real-time countdown updates and time additions live without refreshing.
-  3. Ready notification displays prominently when kitchen finishes prep.
-  4. Unauthorized access or invalid PIN is blocked and rate-limited.
+  1. Customer scans universal QR, inputs order number + PIN, and views their order. [PASS]
+  2. Customer sees real-time countdown updates and time additions live without refreshing. [PASS]
+  3. Ready notification displays prominently when kitchen finishes prep. [PASS]
+  4. Unauthorized access or invalid PIN is blocked and rate-limited. [PASS]
+  5. Public TV display board accurately displays Preparing and Ready orders in real-time. [PASS]
 
 ---
 

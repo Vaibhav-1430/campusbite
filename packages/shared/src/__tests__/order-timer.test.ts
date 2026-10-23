@@ -116,6 +116,105 @@ describe('Order Timer & KDS Schemas', () => {
     expect(timer.isOverdue).toBe(false);
   });
 
+  it('should accurately reconstruct timer state from TrackingOrderDto on refresh', () => {
+    const startedAt = new Date('2026-10-24T12:00:00Z');
+    const estimatedCompletion = new Date('2026-10-24T12:12:00Z'); // 12 min prep
+
+    const trackingOrder = {
+      id: 'ord-public-99',
+      dailyOrderNumber: 'CB-205',
+      status: OrderStatus.PREPARING,
+      initialEstimatedMinutes: 10,
+      preparationStartedAt: startedAt.toISOString(),
+      estimatedCompletionAt: estimatedCompletion.toISOString(),
+      preparedAt: null,
+      completedAt: null,
+      cancelledAt: null,
+      createdAt: '2026-10-24T11:58:00Z',
+      items: [{ name: 'Masala Dosa', quantity: 2, notes: 'Crispy' }],
+      prepAdjustments: [{ minutesAdded: 2, reason: 'Griddle busy', createdAt: '2026-10-24T12:05:00Z' }]
+    };
+
+    // Client refreshes browser at 12:08:30 (8 min 30 sec after prep start)
+    const nowMs = new Date('2026-10-24T12:08:30Z').getTime();
+    const timer = calculateOrderTimer(trackingOrder, nowMs);
+
+    expect(timer.isPreparing).toBe(true);
+    expect(timer.elapsedSeconds).toBe(510); // 8m 30s = 510s
+    expect(timer.remainingSeconds).toBe(210); // 3m 30s remaining = 210s
+    expect(timer.formattedElapsed).toBe('08:30');
+    expect(timer.formattedRemaining).toBe('03:30 left');
+    expect(timer.totalEstimatedMinutes).toBe(12);
+    expect(timer.adjustmentsMinutesTotal).toBe(2);
+    expect(timer.isOverdue).toBe(false);
+  });
+
+  it('should handle PREPARED state with celebratory countdown completion and frozen prep duration', () => {
+    const startedAt = new Date('2026-10-24T12:00:00Z');
+    const preparedAt = new Date('2026-10-24T12:09:45Z'); // took 9m 45s
+
+    const preparedTrackingOrder = {
+      id: 'ord-prepared-1',
+      dailyOrderNumber: 'CB-205',
+      status: OrderStatus.PREPARED,
+      initialEstimatedMinutes: 10,
+      preparationStartedAt: startedAt.toISOString(),
+      estimatedCompletionAt: new Date('2026-10-24T12:10:00Z').toISOString(),
+      preparedAt: preparedAt.toISOString(),
+      completedAt: null,
+      cancelledAt: null,
+      createdAt: '2026-10-24T11:58:00Z',
+      items: [{ name: 'Cold Coffee', quantity: 1 }]
+    };
+
+    const timer = calculateOrderTimer(preparedTrackingOrder);
+    expect(timer.isPrepared).toBe(true);
+    expect(timer.isPreparing).toBe(false);
+    expect(timer.progressPercentage).toBe(100);
+    expect(timer.elapsedSeconds).toBe(585); // 9m 45s = 585s
+    expect(timer.formattedElapsed).toBe('09:45');
+    expect(timer.formattedRemaining).toBe('Ready for pickup');
+  });
+
+  it('should handle COMPLETED state when order is handed over', () => {
+    const startedAt = new Date('2026-10-24T12:00:00Z');
+    const preparedAt = new Date('2026-10-24T12:10:00Z');
+    const completedAt = new Date('2026-10-24T12:12:00Z');
+
+    const completedOrder = {
+      id: 'ord-completed-1',
+      dailyOrderNumber: 'CB-205',
+      status: OrderStatus.COMPLETED,
+      initialEstimatedMinutes: 10,
+      preparationStartedAt: startedAt.toISOString(),
+      estimatedCompletionAt: new Date('2026-10-24T12:10:00Z').toISOString(),
+      preparedAt: preparedAt.toISOString(),
+      completedAt: completedAt.toISOString(),
+      cancelledAt: null,
+      createdAt: '2026-10-24T11:58:00Z',
+      items: [{ name: 'Samosa', quantity: 2 }]
+    };
+
+    const timer = calculateOrderTimer(completedOrder);
+    expect(timer.isCompleted).toBe(true);
+    expect(timer.isPrepared).toBe(false);
+    expect(timer.progressPercentage).toBe(100);
+    expect(timer.formattedRemaining).toBe('Handed over');
+  });
+
+  it('should handle CANCELLED state properly', () => {
+    const cancelledOrder = {
+      ...baseOrder,
+      status: OrderStatus.CANCELLED,
+      cancelledAt: '2026-10-24T10:05:00Z',
+      cancellationReason: 'Customer requested cancellation'
+    };
+
+    const timer = calculateOrderTimer(cancelledOrder);
+    expect(timer.isCancelled).toBe(true);
+    expect(timer.formattedRemaining).toBe('Cancelled');
+  });
+
   it('should validate adjustPrepTimeSchema rejects invalid/negative numbers', () => {
     expect(adjustPrepTimeSchema.safeParse({ minutesAdded: 5 }).success).toBe(true);
     expect(adjustPrepTimeSchema.safeParse({ minutesAdded: 1, reason: 'Extra crispy' }).success).toBe(true);

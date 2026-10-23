@@ -1,7 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { Role } from '@campusbite/shared';
-import { COOKIE_NAME, verifyToken } from '../../utils/token.js';
+import { COOKIE_NAME, verifyToken, verifyTrackingToken } from '../../utils/token.js';
 import { prisma } from '../../database/prisma.js';
 import { logger } from '../../utils/logger.js';
 import { env } from '../../config/env.js';
@@ -100,6 +100,26 @@ export const initSocketIO = (httpServer: HttpServer): SocketIOServer => {
           userSocketsMap.delete(user.id);
         }
       }
+    });
+
+    // Customer tracking subscription (verified via tracking token)
+    socket.on('subscribe:order', (data: { trackingToken: string; orderId: string }) => {
+      try {
+        if (!data || !data.trackingToken || !data.orderId) return;
+        const payload = verifyTrackingToken(data.trackingToken);
+        if (payload.orderId === data.orderId) {
+          socket.join(`order:${data.orderId}`);
+          logger.info(`Customer socket joined order room: ${data.orderId}`, 'SocketIO', { socketId: socket.id });
+        }
+      } catch {
+        // invalid token ignored
+      }
+    });
+
+    // Public cafeteria display board subscription
+    socket.on('subscribe:board', () => {
+      socket.join('board:public');
+      logger.info('Display board socket subscribed', 'SocketIO', { socketId: socket.id });
     });
   });
 

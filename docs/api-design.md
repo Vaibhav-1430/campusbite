@@ -348,6 +348,59 @@
     }
   }
   ```
+* **Error (429 Too Many Requests)**:
+  ```json
+  {
+    "success": false,
+    "error": {
+      "code": "TOO_MANY_REQUESTS",
+      "message": "Too many failed verification attempts. Please wait 1 minute before trying again."
+    }
+  }
+  ```
+
+### 6.2 Authoritative Tracking Status Sync
+* **GET** `/api/v1/tracking/status`
+* **Auth**: `Authorization: Bearer <trackingToken>`
+* **Success (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "order": {
+        "id": "ord_9901",
+        "dailyOrderNumber": "CB-142",
+        "status": "PREPARING",
+        "initialEstimatedMinutes": 10,
+        "preparationStartedAt": "2026-10-23T17:35:00.000Z",
+        "estimatedCompletionAt": "2026-10-23T17:48:00.000Z",
+        "items": [
+          { "name": "Grilled Cheese Sandwich", "quantity": 2 }
+        ],
+        "prepAdjustments": [
+          { "minutesAdded": 3, "reason": "Rush order", "createdAt": "2026-10-23T17:38:00.000Z" }
+        ]
+      }
+    }
+  }
+  ```
+
+### 6.3 Public Cafeteria Display Board Data
+* **GET** `/api/v1/tracking/board`
+* **Auth**: None (Public unauthenticated)
+* **Success (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "board": {
+        "preparing": ["CB-142", "CB-145"],
+        "ready": ["CB-139", "CB-140"],
+        "lastUpdated": "2026-10-23T17:40:00.000Z"
+      }
+    }
+  }
+  ```
 
 ---
 

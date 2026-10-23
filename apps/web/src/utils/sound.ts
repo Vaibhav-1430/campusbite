@@ -129,6 +129,57 @@ export const playNewOrderAlert = (): boolean => {
 };
 
 /**
+ * Synthesize cheerful customer order ready alert:
+ * Plays an upbeat ascending 4-tone arpeggio (C5 -> E5 -> G5 -> C6)
+ * Triggers device vibration if supported.
+ */
+export const playOrderReadyAlert = (): boolean => {
+  if (!audioCtx || audioCtx.state !== 'running') {
+    return false;
+  }
+
+  try {
+    const now = audioCtx.currentTime;
+    const notes = [
+      { freq: 523.25, time: 0, dur: 0.12 }, // C5
+      { freq: 659.25, time: 0.10, dur: 0.12 }, // E5
+      { freq: 783.99, time: 0.20, dur: 0.14 }, // G5
+      { freq: 1046.50, time: 0.32, dur: 0.40 } // C6
+    ];
+
+    notes.forEach(({ freq, time, dur }) => {
+      const osc = audioCtx!.createOscillator();
+      const gain = audioCtx!.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + time);
+
+      gain.gain.setValueAtTime(0, now + time);
+      gain.gain.linearRampToValueAtTime(0.35, now + time + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + time + dur);
+
+      osc.connect(gain);
+      gain.connect(audioCtx!.destination);
+      osc.start(now + time);
+      osc.stop(now + time + dur);
+    });
+
+    // Mobile vibration pattern: [buzz, pause, buzz]
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate([200, 100, 300]);
+      } catch {
+        // ignore vibration permission or hardware lack
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('[Sound] Error playing ready alert:', err);
+    return false;
+  }
+};
+
+/**
  * Trigger optional desktop/browser notification if permitted
  */
 export const showBrowserNotification = (dailyOrderNumber: string, itemCount: number) => {
@@ -139,6 +190,24 @@ export const showBrowserNotification = (dailyOrderNumber: string, itemCount: num
         body: `${itemCount} item(s) awaiting kitchen preparation.`,
         icon: '/favicon.ico',
         tag: `kds-${dailyOrderNumber}`
+      });
+    } catch {
+      // ignore notification errors
+    }
+  }
+};
+
+/**
+ * Trigger customer order ready browser notification
+ */
+export const showCustomerReadyNotification = (dailyOrderNumber: string) => {
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    try {
+      new Notification(`Order ${dailyOrderNumber} is Ready! 🎉`, {
+        body: `Your delicious meal is ready for pickup at the counter!`,
+        icon: '/favicon.ico',
+        tag: `ready-${dailyOrderNumber}`
       });
     } catch {
       // ignore notification errors

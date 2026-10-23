@@ -669,6 +669,18 @@ export const CounterPOSPage: React.FC = () => {
               </p>
             </div>
 
+            <div className="flex items-center justify-between p-2.5 bg-slate-100 rounded-lg text-xs">
+              <span className="text-slate-600 font-mono">/track/{placedOrderDetails.dailyOrderNumber}</span>
+              <a
+                href={`/track/${placedOrderDetails.dailyOrderNumber}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-orange-600 font-bold hover:underline"
+              >
+                Open Tracker ↗
+              </a>
+            </div>
+
             <div className="text-xs text-slate-500">
               Total Amount: <span className="font-bold text-slate-900">{formatPaise(placedOrderDetails.totalPaise)}</span>
             </div>

@@ -486,15 +486,21 @@ export const startPreparation = async (
 
   const io = getIO();
   if (io) {
-    io.to('staff:kitchen').to('staff:counter').to('staff:admin').emit('ORDER_PREPARING', {
-      orderId: updatedOrder.id,
-      dailyOrderNumber: updatedOrder.dailyOrderNumber,
-      preparationStartedAt: preparationStartedAt.toISOString(),
-      estimatedCompletionAt: estimatedCompletionAt.toISOString(),
-      initialEstimatedMinutes: updatedOrder.initialEstimatedMinutes,
-      assignedToId: updatedOrder.assignedToId,
-      assignedToName: updatedOrder.assignedTo?.name
-    });
+    io.to('staff:kitchen')
+      .to('staff:counter')
+      .to('staff:admin')
+      .to(`order:${updatedOrder.id}`)
+      .emit('ORDER_PREPARING', {
+        orderId: updatedOrder.id,
+        dailyOrderNumber: updatedOrder.dailyOrderNumber,
+        preparationStartedAt: preparationStartedAt.toISOString(),
+        estimatedCompletionAt: estimatedCompletionAt.toISOString(),
+        initialEstimatedMinutes: updatedOrder.initialEstimatedMinutes,
+        assignedToId: updatedOrder.assignedToId,
+        assignedToName: updatedOrder.assignedTo?.name
+      });
+
+    io.to('board:public').emit('BOARD_UPDATED');
   }
 
   return sanitizeOrder(updatedOrder);
@@ -581,13 +587,19 @@ export const adjustPreparationTime = async (
 
   const io = getIO();
   if (io) {
-    io.to('staff:kitchen').to('staff:counter').to('staff:admin').emit('ORDER_TIME_ADJUSTED', {
-      orderId: updatedOrder.id,
-      dailyOrderNumber: updatedOrder.dailyOrderNumber,
-      minutesAdded,
-      newEstimatedCompletionAt: newEstimatedCompletionAt.toISOString(),
-      reason
-    });
+    io.to('staff:kitchen')
+      .to('staff:counter')
+      .to('staff:admin')
+      .to(`order:${updatedOrder.id}`)
+      .emit('ORDER_TIME_ADJUSTED', {
+        orderId: updatedOrder.id,
+        dailyOrderNumber: updatedOrder.dailyOrderNumber,
+        minutesAdded,
+        newEstimatedCompletionAt: newEstimatedCompletionAt.toISOString(),
+        reason
+      });
+
+    io.to('board:public').emit('BOARD_UPDATED');
   }
 
   return sanitizeOrder(updatedOrder);
@@ -659,11 +671,17 @@ export const markPrepared = async (
 
   const io = getIO();
   if (io) {
-    io.to('staff:kitchen').to('staff:counter').to('staff:admin').emit('ORDER_PREPARED', {
-      orderId: updatedOrder.id,
-      dailyOrderNumber: updatedOrder.dailyOrderNumber,
-      preparedAt: preparedAt.toISOString()
-    });
+    io.to('staff:kitchen')
+      .to('staff:counter')
+      .to('staff:admin')
+      .to(`order:${updatedOrder.id}`)
+      .emit('ORDER_PREPARED', {
+        orderId: updatedOrder.id,
+        dailyOrderNumber: updatedOrder.dailyOrderNumber,
+        preparedAt: preparedAt.toISOString()
+      });
+
+    io.to('board:public').emit('BOARD_UPDATED');
   }
 
   return sanitizeOrder(updatedOrder);
@@ -732,11 +750,17 @@ export const markHandover = async (
 
   const io = getIO();
   if (io) {
-    io.to('staff:counter').to('staff:kitchen').to('staff:admin').emit('ORDER_COMPLETED', {
-      orderId: updatedOrder.id,
-      dailyOrderNumber: updatedOrder.dailyOrderNumber,
-      completedAt: completedAt.toISOString()
-    });
+    io.to('staff:counter')
+      .to('staff:kitchen')
+      .to('staff:admin')
+      .to(`order:${updatedOrder.id}`)
+      .emit('ORDER_COMPLETED', {
+        orderId: updatedOrder.id,
+        dailyOrderNumber: updatedOrder.dailyOrderNumber,
+        completedAt: completedAt.toISOString()
+      });
+
+    io.to('board:public').emit('BOARD_UPDATED');
   }
 
   return sanitizeOrder(updatedOrder);
@@ -834,12 +858,18 @@ export const cancelOrder = async (
 
   const io = getIO();
   if (io) {
-    io.to('staff:kitchen').to('staff:counter').to('staff:admin').emit('ORDER_CANCELLED', {
-      orderId: updatedOrder.id,
-      dailyOrderNumber: updatedOrder.dailyOrderNumber,
-      reason: reason.trim(),
-      cancelledAt: cancelledAt.toISOString()
-    });
+    io.to('staff:kitchen')
+      .to('staff:counter')
+      .to('staff:admin')
+      .to(`order:${updatedOrder.id}`)
+      .emit('ORDER_CANCELLED', {
+        orderId: updatedOrder.id,
+        dailyOrderNumber: updatedOrder.dailyOrderNumber,
+        reason: reason.trim(),
+        cancelledAt: cancelledAt.toISOString()
+      });
+
+    io.to('board:public').emit('BOARD_UPDATED');
   }
 
   return sanitizeOrder(updatedOrder);

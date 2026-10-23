@@ -4,6 +4,8 @@ import { Role } from '@campusbite/shared';
 import { AuthProvider } from './context/AuthContext.js';
 import { ProtectedRoute } from './components/common/ProtectedRoute.js';
 import { LoginPage } from './pages/LoginPage.js';
+import { CustomerTrackingPage } from './pages/tracking/CustomerTrackingPage.js';
+import { PublicDisplayBoardPage } from './pages/display/PublicDisplayBoardPage.js';
 import { AdminStaffPage } from './pages/admin/AdminStaffPage.js';
 import { AdminMenuPage } from './pages/admin/AdminMenuPage.js';
 import { CounterPOSPage } from './pages/counter/CounterPOSPage.js';
@@ -15,9 +17,15 @@ export const App: React.FC = () => {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          {/* Public Routes */}
+          {/* Public Customer & Cafeteria Routes */}
+          <Route path="/" element={<Navigate to="/track" replace />} />
+          <Route path="/track" element={<CustomerTrackingPage />} />
+          <Route path="/track/:orderNumber" element={<CustomerTrackingPage />} />
+          <Route path="/board" element={<PublicDisplayBoardPage />} />
+          <Route path="/display" element={<Navigate to="/board" replace />} />
+
+          {/* Staff Auth Route */}
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/" element={<Navigate to="/login" replace />} />
 
           {/* Admin Protected Routes */}
           <Route path="/admin" element={<Navigate to="/admin/menu" replace />} />

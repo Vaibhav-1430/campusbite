@@ -1,4 +1,5 @@
 import { OrderDto } from '../types/order.types.js';
+import { TrackingOrderDto } from '../types/tracking.types.js';
 import { OrderStatus } from '../constants/order-status.js';
 
 export interface OrderTimerState {
@@ -31,7 +32,10 @@ const formatSeconds = (totalSeconds: number): string => {
  * Pure function to calculate authoritative timer state from server timestamps.
  * Guarantees zero timer drift and seamless reconstruction on refresh/reconnect.
  */
-export const calculateOrderTimer = (order: OrderDto, nowMs: number = Date.now()): OrderTimerState => {
+export const calculateOrderTimer = (
+  order: OrderDto | TrackingOrderDto,
+  nowMs: number = Date.now()
+): OrderTimerState => {
   const status = order.status;
   const isPlaced = status === OrderStatus.PLACED;
   const isPreparing = status === OrderStatus.PREPARING;

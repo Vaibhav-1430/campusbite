@@ -25,3 +25,24 @@ export const getCookieOptions = () => {
     ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {})
   };
 };
+
+export interface TrackingJwtPayload {
+  orderId: string;
+  dailyOrderNumber: string;
+  type: 'tracking';
+}
+
+export const generateTrackingToken = (orderId: string, dailyOrderNumber: string): string => {
+  return jwt.sign({ orderId, dailyOrderNumber, type: 'tracking' }, env.JWT_SECRET, {
+    expiresIn: '6h'
+  });
+};
+
+export const verifyTrackingToken = (token: string): TrackingJwtPayload => {
+  const payload = jwt.verify(token, env.JWT_SECRET) as any;
+  if (payload.type !== 'tracking' || !payload.orderId) {
+    throw new Error('Invalid tracking token');
+  }
+  return payload as TrackingJwtPayload;
+};
+

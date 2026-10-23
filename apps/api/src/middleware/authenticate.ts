@@ -25,6 +25,10 @@ export const authenticate = async (req: Request, _res: Response, next: NextFunct
       throw new UnauthorizedError('Invalid or expired authentication token', 'TOKEN_EXPIRED');
     }
 
+    if (!payload || !payload.userId || (payload as any).type === 'tracking') {
+      throw new UnauthorizedError('Invalid staff authentication token', 'INVALID_STAFF_TOKEN');
+    }
+
     // Verify user in database
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
