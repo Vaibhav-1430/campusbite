@@ -142,17 +142,17 @@ export const AdminAnalyticsPage: React.FC = () => {
       if (type === 'sales') {
         await downloadCsv(
           `/analytics/export/sales?startDate=${startDate}&endDate=${endDate}`,
-          `campusbite-sales-${startDate}-to-${endDate}.csv`
+          `cafe47-sales-${startDate}-to-${endDate}.csv`
         );
       } else if (type === 'menu') {
         await downloadCsv(
           `/analytics/export/menu?startDate=${startDate}&endDate=${endDate}`,
-          `campusbite-menu-performance-${startDate}-to-${endDate}.csv`
+          `cafe47-menu-performance-${startDate}-to-${endDate}.csv`
         );
       } else if (type === 'closing') {
         await downloadCsv(
           `/analytics/export/daily-closing?date=${closingDate}`,
-          `campusbite-daily-closing-${closingDate}.csv`
+          `cafe47-daily-closing-${closingDate}.csv`
         );
       }
     } catch (err) {

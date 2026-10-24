@@ -71,7 +71,7 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
         <h2 className="mt-4 text-center text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-          CampusBite Staff Portal
+          Cafe47 Staff Portal
         </h2>
         <p className="mt-1 text-center text-sm text-slate-500">
           Sign in to access your counter, kitchen, or management terminal.
@@ -154,7 +154,7 @@ export const LoginPage: React.FC = () => {
 
           <div className="mt-6 border-t border-slate-100 pt-4 text-center">
             <p className="text-xs text-slate-400">
-              CampusBite Internal Restaurant System • Initial Admin Setup Enabled
+              Cafe47 Internal Restaurant System • Staff Terminal
             </p>
           </div>
         </div>

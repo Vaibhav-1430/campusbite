@@ -149,9 +149,9 @@ export const PublicDisplayBoardPage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center">
-              CampusBite <span className="text-orange-500 ml-2 text-base font-semibold">Cafeteria Board</span>
+              Cafe47 <span className="text-orange-500 ml-2 text-base font-semibold">Live Order Board</span>
             </h1>
-            <p className="text-xs text-slate-400">Live Kitchen & Pickup Display</p>
+            <p className="text-xs text-slate-400">Authentic Himalayan Cuisine • Live Pickup Display</p>
           </div>
         </div>
 

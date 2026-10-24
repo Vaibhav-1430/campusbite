@@ -407,8 +407,8 @@ export const CustomerTrackingPage: React.FC = () => {
               <Utensils className="w-4 h-4" />
             </div>
             <div>
-              <span className="font-black text-base tracking-tight text-white">CampusBite</span>
-              <span className="hidden sm:inline-block text-xs text-orange-400 ml-2 font-medium">Live Tracker</span>
+              <span className="font-black text-base tracking-tight text-white">Cafe47</span>
+              <span className="hidden sm:inline-block text-xs text-orange-400 ml-2 font-medium">Order Tracker</span>
             </div>
           </Link>
 
@@ -449,7 +449,7 @@ export const CustomerTrackingPage: React.FC = () => {
             <Link
               to="/board"
               className="p-2 rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              title="Cafeteria Display Board"
+              title="Cafe47 Live Order Board"
               aria-label="Open Public Display Board"
             >
               <Monitor className="w-4 h-4" />
@@ -544,7 +544,7 @@ export const CustomerTrackingPage: React.FC = () => {
               </form>
 
               <div className="mt-6 pt-5 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
-                <span>Looking for cafeteria queue?</span>
+                <span>Looking for live order board?</span>
                 <Link to="/board" className="text-orange-400 hover:text-orange-300 font-semibold flex items-center">
                   <span>View Public TV Board</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-1" />
@@ -730,7 +730,7 @@ export const CustomerTrackingPage: React.FC = () => {
                 </div>
                 <h2 className="text-xl font-bold text-white">Order Completed</h2>
                 <p className="text-sm text-slate-400 mt-1 max-w-sm mx-auto">
-                  Your order has been handed over at the counter. Thank you for dining with CampusBite! Enjoy your meal.
+                  Your order has been handed over at the counter. Thank you for dining with Cafe47! Enjoy your meal.
                 </p>
                 <button
                   onClick={handleClearSession}
@@ -811,7 +811,7 @@ export const CustomerTrackingPage: React.FC = () => {
 
       {/* Footer */}
       <footer className="mt-auto border-t border-slate-900 py-4 px-4 text-center text-xs text-slate-600">
-        CampusBite • Fast, reliable campus dining • Keep this page open for live updates
+        Cafe47 • Serving Authentic Himalayan Cuisine • Keep this page open for live updates
       </footer>
     </div>
   );

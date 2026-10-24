@@ -31,7 +31,7 @@ export const UniversalQrModal: React.FC<UniversalQrModalProps> = ({ isOpen, onCl
     if (!qrDataUrl) return;
     const a = document.createElement('a');
     a.href = qrDataUrl;
-    a.download = 'campusbite-order-tracking-qr.png';
+    a.download = 'cafe47-order-tracking-qr.png';
     a.click();
   };
 
@@ -43,7 +43,7 @@ export const UniversalQrModal: React.FC<UniversalQrModalProps> = ({ isOpen, onCl
     <Modal isOpen={isOpen} onClose={onClose} title="Universal Order Tracking QR Code">
       <div className="flex flex-col items-center space-y-4 text-center py-2">
         <p className="text-xs sm:text-sm text-slate-500 max-w-sm">
-          Print or place this single QR code on cafeteria tables and pickup counters. Customers scan it
+          Print or place this single QR code on cafe tables and pickup counters. Customers scan it
           to track their food status live on their smartphones.
         </p>
 
@@ -52,7 +52,7 @@ export const UniversalQrModal: React.FC<UniversalQrModalProps> = ({ isOpen, onCl
           {qrDataUrl ? (
             <img
               src={qrDataUrl}
-              alt="CampusBite Tracking QR Code"
+              alt="Cafe47 Tracking QR Code"
               className="w-56 h-56 sm:w-64 sm:h-64 object-contain rounded-lg"
             />
           ) : (

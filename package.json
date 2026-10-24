@@ -19,7 +19,8 @@
     "db:migrate": "npm run db:migrate --workspace=@campusbite/api",
     "db:deploy": "npm run db:deploy --workspace=@campusbite/api",
     "db:seed:admin": "tsx apps/api/src/scripts/bootstrap-admin.ts",
-    "db:create:admin": "tsx apps/api/src/scripts/create-admin.ts"
+    "db:create:admin": "tsx apps/api/src/scripts/create-admin.ts",
+    "db:seed:cafe47": "tsx apps/api/src/scripts/seed-cafe47-menu.ts"
   },
   "dependencies": {
     "typescript": "^5.4.5"
