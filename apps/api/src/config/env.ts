@@ -59,10 +59,17 @@ const envSchema = z
 
 const parsed = envSchema.safeParse(process.env);
 
+import { sanitizeAndEnhanceDbUrl } from '../database/connection-url.js';
+
 if (!parsed.success) {
   console.error('Invalid environment variables configuration:');
   console.error(JSON.stringify(parsed.error.format(), null, 2));
   process.exit(1);
 }
+
+// Ensure process.env.DATABASE_URL and exported env.DATABASE_URL are enhanced with serverless resilience
+const enhancedDatabaseUrl = sanitizeAndEnhanceDbUrl(parsed.data.DATABASE_URL);
+process.env.DATABASE_URL = enhancedDatabaseUrl;
+parsed.data.DATABASE_URL = enhancedDatabaseUrl;
 
 export const env = parsed.data;
