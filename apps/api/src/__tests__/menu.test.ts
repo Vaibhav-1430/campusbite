@@ -188,5 +188,71 @@ describe('Menu & Category Management API', () => {
       expect(response.status).toBe(400);
       expect(response.body.error.code).toBe('CATEGORY_IN_USE');
     });
+
+    it('should allow ADMIN to edit a menu item via PUT and PATCH', async () => {
+      const putRes = await request(app)
+        .put(`/api/v1/menu/${menuItemId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Iced Cold Coffee',
+          pricePaise: 7500, // ₹75.00
+          prepTimeMinutes: 7
+        });
+
+      expect(putRes.status).toBe(200);
+      expect(putRes.body.data.item.name).toBe('Iced Cold Coffee');
+      expect(putRes.body.data.item.pricePaise).toBe(7500);
+
+      const patchRes = await request(app)
+        .patch(`/api/v1/menu/${menuItemId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          description: 'Special chilled blend'
+        });
+
+      expect(patchRes.status).toBe(200);
+      expect(patchRes.body.data.item.description).toBe('Special chilled blend');
+    });
+  });
+
+  describe('Initial Menu Setup & Cafe47 Initialization Endpoint', () => {
+    it('should reject unauthenticated or non-admin calls to initialize Cafe47 menu with 401/403', async () => {
+      const unauthRes = await request(app).post('/api/v1/menu/initialize-cafe47');
+      expect(unauthRes.status).toBe(401);
+
+      const counterRes = await request(app)
+        .post('/api/v1/menu/initialize-cafe47')
+        .set('Authorization', `Bearer ${counterToken}`);
+      expect(counterRes.status).toBe(403);
+    });
+
+    it('should allow ADMIN to initialize Cafe47 menu idempotently', async () => {
+      const initRes = await request(app)
+        .post('/api/v1/menu/initialize-cafe47')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(initRes.status).toBe(200);
+      expect(initRes.body.success).toBe(true);
+      expect(initRes.body.data.totalCategories).toBe(9);
+      expect(initRes.body.data.totalItems).toBe(65);
+
+      // Verify categories and menu items now load in public GET queries
+      const catsRes = await request(app).get('/api/v1/categories');
+      expect(catsRes.status).toBe(200);
+      expect(catsRes.body.data.categories.length).toBeGreaterThanOrEqual(9);
+
+      const itemsRes = await request(app).get('/api/v1/menu');
+      expect(itemsRes.status).toBe(200);
+      expect(itemsRes.body.data.items.length).toBeGreaterThanOrEqual(65);
+
+      // Verify second initialization is idempotent
+      const secondInitRes = await request(app)
+        .post('/api/v1/menu/initialize-cafe47')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(secondInitRes.status).toBe(200);
+      expect(secondInitRes.body.data.itemsCreated).toBe(0);
+      expect(secondInitRes.body.data.itemsUnchanged).toBe(65);
+    });
   });
 });

@@ -87,3 +87,16 @@ export const deleteMenuItem = async (req: Request, res: Response, next: NextFunc
     next(err);
   }
 };
+
+export const initializeCafe47Menu = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const actorId = req.user!.id;
+    const actorRole = req.user!.role;
+    const ip = req.ip || req.socket.remoteAddress;
+
+    const report = await menuService.initializeCafe47Menu(actorId, actorRole, ip);
+    return sendSuccess(res, report, 200);
+  } catch (err) {
+    next(err);
+  }
+};

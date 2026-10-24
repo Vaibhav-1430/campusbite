@@ -19,8 +19,15 @@ router.patch(
 );
 
 // Admin-only management endpoints
+router.post(
+  '/initialize-cafe47',
+  authenticate,
+  requireRole([Role.ADMIN]),
+  menuController.initializeCafe47Menu
+);
 router.post('/', authenticate, requireRole([Role.ADMIN]), menuController.createMenuItem);
 router.put('/:id', authenticate, requireRole([Role.ADMIN]), menuController.updateMenuItem);
+router.patch('/:id', authenticate, requireRole([Role.ADMIN]), menuController.updateMenuItem);
 router.delete('/:id', authenticate, requireRole([Role.ADMIN]), menuController.deleteMenuItem);
 
 export default router;

@@ -3,6 +3,7 @@ import { prisma } from '../../database/prisma.js';
 import { BadRequestError, NotFoundError } from '../../utils/errors.js';
 import { logAudit } from '../audit/audit.service.js';
 import { getIO } from '../events/socket.js';
+import { importCafe47Menu, Cafe47MenuImportReport } from '../../scripts/seed-cafe47-menu.js';
 
 const defaultMenuInclude = {
   category: { select: { name: true } },
@@ -271,4 +272,29 @@ export const deleteMenuItem = async (
     metadata: { name: item.name },
     ipAddress
   });
+};
+
+export const initializeCafe47Menu = async (
+  actorId: string,
+  actorRole: Role,
+  ipAddress?: string
+): Promise<Cafe47MenuImportReport> => {
+  const report = await importCafe47Menu({ dryRun: false });
+
+  await logAudit({
+    actorId,
+    actorRole,
+    action: 'CAFE47_MENU_INITIALIZED',
+    entityType: 'Menu',
+    entityId: 'cafe47-menu',
+    metadata: {
+      categoriesCreated: report.categoriesCreated,
+      itemsCreated: report.itemsCreated,
+      totalCategories: report.totalCategories,
+      totalItems: report.totalItems
+    },
+    ipAddress
+  });
+
+  return report;
 };

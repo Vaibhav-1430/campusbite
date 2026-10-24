@@ -12,6 +12,7 @@ router.get('/', categoryController.listCategories);
 // Admin-only category management
 router.post('/', authenticate, requireRole([Role.ADMIN]), categoryController.createCategory);
 router.patch('/:id', authenticate, requireRole([Role.ADMIN]), categoryController.updateCategory);
+router.put('/:id', authenticate, requireRole([Role.ADMIN]), categoryController.updateCategory);
 router.delete('/:id', authenticate, requireRole([Role.ADMIN]), categoryController.deleteCategory);
 
 export default router;

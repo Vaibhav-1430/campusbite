@@ -30,7 +30,8 @@ import {
   EyeOff,
   Clock,
   Boxes,
-  BarChart3
+  BarChart3,
+  Sparkles
 } from 'lucide-react';
 
 export const AdminMenuPage: React.FC = () => {
@@ -38,6 +39,7 @@ export const AdminMenuPage: React.FC = () => {
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItemDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isInitializingMenu, setIsInitializingMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
 
@@ -263,6 +265,38 @@ export const AdminMenuPage: React.FC = () => {
     }
   };
 
+  // Handle Initialize Cafe47 Menu
+  const handleInitializeCafe47Menu = async () => {
+    clearMessages();
+    const confirmed = window.confirm(
+      'Initialize Cafe47 standard menu with 9 categories and 65 food items?\n\nThis will load the verified Himalayan & fast-food menu items (Noodles, Momos, Burgers, Starters, etc.). Existing items will not be duplicated.'
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsInitializingMenu(true);
+      const res = await apiRequest<{
+        categoriesCreated: number;
+        totalCategories: number;
+        itemsCreated: number;
+        totalItems: number;
+      }>('/menu/initialize-cafe47', { method: 'POST' });
+
+      setSuccessMessage(
+        `Cafe47 menu initialized successfully (${res.categoriesCreated || res.totalCategories} categories, ${res.itemsCreated || res.totalItems} food items ready).`
+      );
+      await fetchData();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setErrorMessage(err.message);
+      } else {
+        setErrorMessage('Failed to initialize Cafe47 menu.');
+      }
+    } finally {
+      setIsInitializingMenu(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Navbar />
@@ -347,6 +381,17 @@ export const AdminMenuPage: React.FC = () => {
               >
                 <Plus className="w-4 h-4 mr-1.5" />
                 Add Category
+              </button>
+            )}
+
+            {categories.length === 0 && (
+              <button
+                onClick={handleInitializeCafe47Menu}
+                disabled={isInitializingMenu}
+                className="inline-flex items-center justify-center px-4 py-2.5 rounded-lg text-sm font-semibold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 shadow-sm transition-colors disabled:opacity-60"
+              >
+                <Sparkles className="w-4 h-4 mr-1.5" />
+                {isInitializingMenu ? 'Initializing...' : 'Initialize Cafe47 Menu'}
               </button>
             )}
           </div>
@@ -439,14 +484,38 @@ export const AdminMenuPage: React.FC = () => {
                   <p className="mt-3 text-sm text-slate-500">Loading menu offerings...</p>
                 </div>
               ) : filteredItems.length === 0 ? (
-                <div className="p-12 text-center">
-                  <Utensils className="w-10 h-10 text-slate-300 mx-auto" />
-                  <p className="mt-2 text-sm font-semibold text-slate-900">No menu items found</p>
+                <div className="p-12 text-center max-w-lg mx-auto">
+                  <Utensils className="w-12 h-12 text-slate-300 mx-auto" />
+                  <p className="mt-3 text-base font-semibold text-slate-900">No menu items found</p>
                   <p className="text-xs text-slate-500 mt-1">
                     {categories.length === 0
-                      ? 'Create at least one category before adding food items.'
-                      : 'Click "Add Food Item" to create offerings.'}
+                      ? 'The menu database is currently empty. Initialize the standard Cafe47 menu or add your first category.'
+                      : 'Click "Add Food Item" to create offerings or adjust your search filter.'}
                   </p>
+                  {categories.length === 0 && (
+                    <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+                      <button
+                        onClick={() => {
+                          setCategoryError(null);
+                          setEditingCategory(null);
+                          setCategoryForm({ name: '', displayOrder: 1, isActive: true });
+                          setIsCategoryModalOpen(true);
+                        }}
+                        className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
+                      >
+                        <Plus className="w-4 h-4 mr-1.5 text-slate-500" />
+                        Add First Category
+                      </button>
+                      <button
+                        onClick={handleInitializeCafe47Menu}
+                        disabled={isInitializingMenu}
+                        className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 rounded-lg text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 shadow-sm transition-colors disabled:opacity-60"
+                      >
+                        <Sparkles className="w-4 h-4 mr-1.5" />
+                        {isInitializingMenu ? 'Initializing...' : 'Initialize Cafe47 Menu (65 Items)'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -576,12 +645,34 @@ export const AdminMenuPage: React.FC = () => {
         {activeTab === 'categories' && (
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             {categories.length === 0 ? (
-              <div className="p-12 text-center">
-                <Layers className="w-10 h-10 text-slate-300 mx-auto" />
-                <p className="mt-2 text-sm font-semibold text-slate-900">No categories found</p>
+              <div className="p-12 text-center max-w-lg mx-auto">
+                <Layers className="w-12 h-12 text-slate-300 mx-auto" />
+                <p className="mt-3 text-base font-semibold text-slate-900">No categories found</p>
                 <p className="text-xs text-slate-500 mt-1">
-                  Click "Add Category" to create food groups.
+                  Click "Add Category" to create your own food groups, or initialize the verified Cafe47 Himalayan menu structure.
                 </p>
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <button
+                    onClick={() => {
+                      setCategoryError(null);
+                      setEditingCategory(null);
+                      setCategoryForm({ name: '', displayOrder: 1, isActive: true });
+                      setIsCategoryModalOpen(true);
+                    }}
+                    className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
+                  >
+                    <Plus className="w-4 h-4 mr-1.5 text-slate-500" />
+                    Add Category
+                  </button>
+                  <button
+                    onClick={handleInitializeCafe47Menu}
+                    disabled={isInitializingMenu}
+                    className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 rounded-lg text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 shadow-sm transition-colors disabled:opacity-60"
+                  >
+                    <Sparkles className="w-4 h-4 mr-1.5" />
+                    {isInitializingMenu ? 'Initializing...' : 'Initialize Cafe47 Menu (65 Items)'}
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="overflow-x-auto">
