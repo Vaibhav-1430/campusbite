@@ -1,6 +1,35 @@
 import { ApiResponse, ApiErrorResponse } from '@campusbite/shared';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const TOKEN_KEY = 'campusbite_auth_token';
+
+type UnauthorizedHandler = () => void;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+export function setOnUnauthorized(handler: UnauthorizedHandler | null): void {
+  unauthorizedHandler = handler;
+}
+
+export function getStoredToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredToken(token: string | null): void {
+  try {
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(TOKEN_KEY);
+    }
+  } catch {
+    // Storage access may be restricted in sandboxed environments
+  }
+}
 
 export class ApiError extends Error {
   public code: string;
@@ -27,11 +56,24 @@ export async function apiRequest<T>(
     headers.set('Content-Type', 'application/json');
   }
 
+  // Attach stored bearer token for cross-origin or cookie-restricted environments
+  const token = getStoredToken();
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
   const response = await fetch(url, {
     ...options,
     headers,
     credentials: 'include' // Sends & receives HTTP-only cookies
   });
+
+  if (response.status === 401 && !endpoint.includes('/auth/login')) {
+    setStoredToken(null);
+    if (unauthorizedHandler) {
+      unauthorizedHandler();
+    }
+  }
 
   const json: ApiResponse<T> = await response.json().catch(() => ({
     success: false,
@@ -55,7 +97,14 @@ export async function apiRequest<T>(
 
 export async function downloadCsv(endpoint: string, filename: string): Promise<void> {
   const url = `${API_BASE_URL}${endpoint}`;
+  const headers = new Headers();
+  const token = getStoredToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
   const response = await fetch(url, {
+    headers,
     credentials: 'include'
   });
 

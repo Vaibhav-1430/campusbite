@@ -5,7 +5,7 @@ import {
   calculateOrderTimer,
   OrderTimerState
 } from '@campusbite/shared';
-import { apiRequest, ApiError } from '../../services/api.js';
+import { apiRequest, ApiError, getStoredToken } from '../../services/api.js';
 import { Navbar } from '../../components/common/Navbar.js';
 import { Modal } from '../../components/common/Modal.js';
 import { useAuth } from '../../context/AuthContext.js';
@@ -104,9 +104,17 @@ export const KitchenKDSPage: React.FC = () => {
 
   // Socket.IO Real-Time Event Listener
   useEffect(() => {
-    const socket: Socket = io({
+    const socketUrl =
+      import.meta.env.VITE_SOCKET_URL ||
+      (import.meta.env.VITE_API_BASE_URL
+        ? new URL(import.meta.env.VITE_API_BASE_URL, window.location.origin).origin
+        : window.location.origin);
+
+    const token = getStoredToken();
+    const socket: Socket = io(socketUrl, {
       transports: ['websocket', 'polling'],
-      withCredentials: true
+      withCredentials: true,
+      auth: token ? { token } : undefined
     });
 
     socket.on('connect', () => {

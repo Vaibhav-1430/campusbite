@@ -1,11 +1,21 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import { z } from 'zod';
+import { sanitizeAndEnhanceDbUrl } from '../database/connection-url.js';
+import { assertSafeTestDatabase } from '../database/safety-guard.js';
 
-// In production, environment variables provided by the container/orchestrator (e.g. Render)
-// are the authoritative source of truth. Only load local .env files when running locally
-// or when DATABASE_URL is not already supplied in the process environment.
-if (process.env.NODE_ENV !== 'production' || !process.env.DATABASE_URL) {
+// Environment variable resolution:
+// When running in test mode (NODE_ENV === 'test'), strictly prioritize dedicated test env files
+// and forbid loading production/development credentials from .env or apps/api/.env
+if (process.env.NODE_ENV === 'test') {
+  dotenv.config({ path: path.resolve(process.cwd(), '.env.test.local') });
+  dotenv.config({ path: path.resolve(process.cwd(), '.env.test') });
+  dotenv.config({ path: path.resolve(process.cwd(), 'apps/api/.env.test.local') });
+  dotenv.config({ path: path.resolve(process.cwd(), 'apps/api/.env.test') });
+} else if (process.env.NODE_ENV !== 'production' || !process.env.DATABASE_URL) {
+  // In production, environment variables provided by the container/orchestrator (e.g. Render)
+  // are the authoritative source of truth. Only load local .env files when running locally
+  // or when DATABASE_URL is not already supplied in the process environment.
   dotenv.config({ path: path.resolve(process.cwd(), '.env') });
   dotenv.config({ path: path.resolve(process.cwd(), 'apps/api/.env') });
 }
@@ -24,6 +34,18 @@ const envSchema = z
     INITIAL_ADMIN_PASSWORD: z.string().default('AdminPassword123!')
   })
   .superRefine((data, ctx) => {
+    if (data.NODE_ENV === 'test') {
+      try {
+        assertSafeTestDatabase(data.DATABASE_URL, 'Environment validation (NODE_ENV=test)');
+      } catch (err: any) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['DATABASE_URL'],
+          message: err.message
+        });
+      }
+    }
+
     if (data.NODE_ENV === 'production') {
       if (
         data.JWT_SECRET.toLowerCase().includes('dev') ||
@@ -58,8 +80,6 @@ const envSchema = z
   });
 
 const parsed = envSchema.safeParse(process.env);
-
-import { sanitizeAndEnhanceDbUrl } from '../database/connection-url.js';
 
 if (!parsed.success) {
   console.error('Invalid environment variables configuration:');

@@ -13,6 +13,7 @@
     "db:seed:admin": "tsx src/scripts/bootstrap-admin.ts",
     "db:create:admin": "tsx src/scripts/create-admin.ts",
     "db:seed:cafe47": "tsx src/scripts/seed-cafe47-menu.ts",
+    "db:check:safety": "tsx src/scripts/check-db-safety.ts",
     "test": "vitest run --fileParallelism=false --pool=forks"
   },
   "dependencies": {

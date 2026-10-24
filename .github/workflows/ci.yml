@@ -47,6 +47,12 @@ jobs:
           DATABASE_URL: postgresql://postgres:password@localhost:5432/campusbite_ci?schema=public
         run: npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
 
+      - name: Verify Test Database Safety Compliance
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/campusbite_ci?schema=public
+        run: npm run db:check:safety
+
       - name: Run Monorepo Test Suites
         env:
           NODE_ENV: test

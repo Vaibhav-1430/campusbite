@@ -2,18 +2,41 @@ import { Role } from '@campusbite/shared';
 import { prisma } from '../database/prisma.js';
 import { hashPassword } from '../utils/password.js';
 import { generateToken } from '../utils/token.js';
+import {
+  TEST_CLEANUP_CAPABILITY,
+  assertTestCleanupCapability,
+  assertSafeTestDatabase
+} from '../database/safety-guard.js';
 
-export const cleanDatabase = async () => {
-  await prisma.auditLog.deleteMany();
-  await prisma.orderStatusHistory.deleteMany();
-  await prisma.preparationTimeAdjustment.deleteMany();
-  await prisma.inventoryMovement.deleteMany();
-  await prisma.orderItem.deleteMany();
-  await prisma.order.deleteMany();
-  await prisma.menuItem.deleteMany();
-  await prisma.category.deleteMany();
-  await prisma.stockItem.deleteMany();
-  await prisma.user.deleteMany();
+export { TEST_CLEANUP_CAPABILITY };
+
+/**
+ * Destructively cleans business tables in an isolated test database.
+ * FAIL-CLOSED SAFETY:
+ * 1. Requires explicit TEST_CLEANUP_CAPABILITY capability token.
+ * 2. Strictly verifies NODE_ENV === 'test'.
+ * 3. Strictly verifies that the target database is an approved isolated test database
+ *    (e.g. localhost, campusbite_test). Prohibits any connection to production/Neon.
+ */
+export const cleanDatabase = async (capability: symbol = TEST_CLEANUP_CAPABILITY) => {
+  // Guard against unapproved database targets or missing capability token
+  assertTestCleanupCapability(capability, process.env.DATABASE_URL, 'cleanDatabase');
+
+  try {
+    await prisma.auditLog.deleteMany();
+    await prisma.orderStatusHistory.deleteMany();
+    await prisma.preparationTimeAdjustment.deleteMany();
+    await prisma.inventoryMovement.deleteMany();
+    await prisma.orderItem.deleteMany();
+    await prisma.order.deleteMany();
+    await prisma.menuItem.deleteMany();
+    await prisma.category.deleteMany();
+    await prisma.stockItem.deleteMany();
+    await prisma.user.deleteMany();
+  } catch (error: any) {
+    console.error(`Error during test database cleanup: ${error?.message || error}`);
+    throw error;
+  }
 };
 
 export const createTestUser = async (overrides?: {
@@ -23,6 +46,8 @@ export const createTestUser = async (overrides?: {
   role?: Role;
   isActive?: boolean;
 }) => {
+  assertSafeTestDatabase(process.env.DATABASE_URL, 'createTestUser');
+
   const email = overrides?.email || `user_${Date.now()}_${Math.random().toString(36).substring(7)}@test.internal`;
   const name = overrides?.name || 'Test User';
   const password = overrides?.password || 'Password123!';

@@ -22,6 +22,7 @@ export const getCookieOptions = () => {
     sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
     maxAge: 8 * 60 * 60 * 1000, // 8 hours in ms
     path: '/',
+    ...(isProduction ? { partitioned: true } : {}),
     ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {})
   };
 };

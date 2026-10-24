@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { AuthSessionUser, LoginInput } from '@campusbite/shared';
-import { apiRequest } from '../services/api.js';
+import { apiRequest, setStoredToken, setOnUnauthorized } from '../services/api.js';
 
 interface AuthContextType {
   user: AuthSessionUser | null;
@@ -21,6 +21,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const data = await apiRequest<{ user: AuthSessionUser }>('/auth/me');
       setUser(data.user);
     } catch {
+      setStoredToken(null);
       setUser(null);
     } finally {
       setLoading(false);
@@ -28,7 +29,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
+    // When any request receives 401 Unauthorized, automatically clear user state
+    setOnUnauthorized(() => {
+      setUser(null);
+    });
+
     refreshUser();
+
+    return () => {
+      setOnUnauthorized(null);
+    };
   }, [refreshUser]);
 
   const login = async (input: LoginInput): Promise<AuthSessionUser> => {
@@ -36,6 +46,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       method: 'POST',
       body: JSON.stringify(input)
     });
+    if (data.token) {
+      setStoredToken(data.token);
+    }
     setUser(data.user);
     return data.user;
   };
@@ -46,6 +59,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.warn('Logout request failed or already logged out', err);
     } finally {
+      setStoredToken(null);
       setUser(null);
     }
   };

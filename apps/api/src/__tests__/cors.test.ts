@@ -1,21 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
-import { cleanDatabase } from './test-helper.js';
-import { prisma } from '../database/prisma.js';
 import { isOriginAllowed, normalizeOrigin } from '../config/cors.js';
 
 const app = createApp();
 
 describe('CORS & Preflight Production Readiness Gate', () => {
-  beforeAll(async () => {
-    await cleanDatabase();
-  });
-
-  afterAll(async () => {
-    await cleanDatabase();
-    await prisma.$disconnect();
-  });
 
   describe('Origin Normalization & Matching Logic', () => {
     it('should normalize origins with trailing slashes and quotes', () => {
