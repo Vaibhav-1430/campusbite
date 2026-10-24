@@ -1,13 +1,16 @@
 import { logger } from '../utils/logger.js';
 import { prisma } from './prisma.js';
 
+export type { DatabaseConnectionInfo } from './connection-url.js';
 export {
-  DatabaseConnectionInfo,
   getSanitizedConnectionInfo,
   sanitizeAndEnhanceDbUrl
 } from './connection-url.js';
 
-import { getSanitizedConnectionInfo } from './connection-url.js';
+import {
+  getSanitizedConnectionInfo,
+  sanitizeAndEnhanceDbUrl
+} from './connection-url.js';
 
 /**
  * Runs safe, non-destructive startup diagnostics testing database connectivity.

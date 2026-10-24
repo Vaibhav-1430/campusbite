@@ -3,6 +3,7 @@ import { prisma } from '../database/prisma.js';
 import { hashPassword, comparePassword } from '../utils/password.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
+import { getSanitizedConnectionInfo } from '../database/connection-url.js';
 
 export interface CreateAdminOptions {
   email?: string;
@@ -333,7 +334,26 @@ if (process.argv[1]?.includes('create-admin')) {
     .toLowerCase();
   const targetPassword = process.env.ADMIN_PASSWORD;
 
-  if (flags.has('--dry-run')) {
+  const isDryRun =
+    flags.has('--dry-run') ||
+    process.env.DRY_RUN === 'true' ||
+    process.env.ADMIN_ACTION === 'dry-run';
+
+  const isCleanupOnly =
+    flags.has('--cleanup-only') ||
+    flags.has('--remove-other-admins-only') ||
+    process.env.CLEANUP_ONLY === 'true' ||
+    process.env.ADMIN_ACTION === 'cleanup';
+
+  const dbUrl = process.env.DATABASE_URL || env.DATABASE_URL;
+  const dbInfo = getSanitizedConnectionInfo(dbUrl);
+  console.log(
+    `Database Target: ${dbInfo.provider}://${dbInfo.host}:${dbInfo.port}/${dbInfo.database} [SSL: ${
+      dbInfo.sslMode || 'require'
+    }, Neon: ${dbInfo.isNeon}, Pooled: ${dbInfo.isPooled}]`
+  );
+
+  if (isDryRun) {
     dryRunAdminCleanup(targetEmail)
       .then((summary) => {
         console.log('=== DRY-RUN ADMIN CLEANUP SUMMARY ===');
@@ -355,7 +375,7 @@ if (process.argv[1]?.includes('create-admin')) {
         console.error('Dry-run failed:', err.message);
         process.exit(1);
       });
-  } else if (flags.has('--cleanup-only') || flags.has('--remove-other-admins-only')) {
+  } else if (isCleanupOnly) {
     executeVerifiedAdminCleanup(targetEmail, targetPassword)
       .then((res) => {
         console.log(`SUCCESS: Verified administrator ${targetEmail} exists and authenticated.`);
