@@ -172,6 +172,40 @@ describe('Admin Creation Script (create-admin)', () => {
     expect(dbKitchen?.email).toBe('staff.kitchen@campusbite.internal');
   });
 
+  it('should preserve all existing admins and staff when removeOtherAdmins is false', async () => {
+    // 1. Create a second admin user
+    const secondAdmin = await prisma.user.create({
+      data: {
+        email: 'secondary.admin@campusbite.internal',
+        name: 'Secondary Admin',
+        passwordHash: '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqr',
+        role: Role.ADMIN,
+        isActive: true
+      }
+    });
+
+    // 2. Create owner@campusbite.internal with removeOtherAdmins: false
+    const ownerResult = await createAdminAccount({
+      email: 'owner@campusbite.internal',
+      name: 'Owner Admin',
+      password: 'Adminhumai47',
+      removeOtherAdmins: false
+    });
+
+    expect(ownerResult.status).toBe('CREATED');
+    expect(ownerResult.user?.email).toBe('owner@campusbite.internal');
+    expect(ownerResult.removedOtherAdminsCount).toBe(0);
+
+    // 3. Verify ALL admins are preserved in DB
+    const allAdmins = await prisma.user.findMany({
+      where: { role: Role.ADMIN }
+    });
+    const adminEmails = allAdmins.map((a) => a.email);
+    expect(adminEmails).toContain('cafe47@campusbite.internal');
+    expect(adminEmails).toContain('secondary.admin@campusbite.internal');
+    expect(adminEmails).toContain('owner@campusbite.internal');
+  });
+
   it('should reject invalid email formats', async () => {
     await expect(
       createAdminAccount({

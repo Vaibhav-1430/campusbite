@@ -104,12 +104,20 @@ export const createAdminAccount = async (options: CreateAdminOptions = {}): Prom
 
   const password = options.password || process.env.ADMIN_PASSWORD || positionalArgs[2] || 'Adminhumai47';
 
+  const shouldPreserveExistingAdmins =
+    flags.has('--preserve-existing-admins') ||
+    flags.has('--preserve-other-admins') ||
+    flags.has('--keep-other-admins') ||
+    process.env.PRESERVE_EXISTING_ADMINS === 'true' ||
+    process.env.REMOVE_OTHER_ADMINS === 'false';
+
   const shouldRemoveOtherAdmins =
     options.removeOtherAdmins !== undefined
       ? options.removeOtherAdmins
-      : flags.has('--remove-other-admins') ||
-        flags.has('--remove-all-other-admins') ||
-        process.env.REMOVE_OTHER_ADMINS === 'true';
+      : !shouldPreserveExistingAdmins &&
+        (flags.has('--remove-other-admins') ||
+         flags.has('--remove-all-other-admins') ||
+         process.env.REMOVE_OTHER_ADMINS === 'true');
 
   // 1. Validate Email format
   if (!email.includes('@') || !email.includes('.')) {
