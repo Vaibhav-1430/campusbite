@@ -223,4 +223,41 @@ describe('Admin Creation Script (create-admin)', () => {
       })
     ).rejects.toThrow('at least 8 characters');
   });
+
+  it('should generate accurate dry-run admin cleanup summary without mutating database', async () => {
+    const { dryRunAdminCleanup } = await import('../scripts/create-admin.js');
+    const summary = await dryRunAdminCleanup('owner@campusbite.internal');
+
+    expect(summary.targetPreservedAdmin.email).toBe('owner@campusbite.internal');
+    expect(summary.targetPreservedAdmin.exists).toBe(true);
+    expect(summary.targetPreservedAdmin.role).toBe(Role.ADMIN);
+    expect(summary.adminAccountsToRemove.count).toBeGreaterThan(0);
+    expect(summary.adminAccountsToRemove.emails).toContain('cafe47@campusbite.internal');
+    expect(summary.staffAccountsPreserved.totalNonAdminCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('should execute verified cleanup transactionally and abort if password or role is invalid', async () => {
+    const { executeVerifiedAdminCleanup } = await import('../scripts/create-admin.js');
+
+    // 1. Abort on invalid password
+    await expect(
+      executeVerifiedAdminCleanup('owner@campusbite.internal', 'WrongPassword123!')
+    ).rejects.toThrow('SAFETY ABORT: Authentication verification failed');
+
+    // 2. Abort on nonexistent target
+    await expect(
+      executeVerifiedAdminCleanup('nonexistent@campusbite.internal')
+    ).rejects.toThrow('SAFETY ABORT: Target administrator "nonexistent@campusbite.internal" does not exist');
+
+    // 3. Succeed with correct credentials
+    const cleanupResult = await executeVerifiedAdminCleanup('owner@campusbite.internal', 'Adminhumai47');
+    expect(cleanupResult.success).toBe(true);
+    expect(cleanupResult.removedCount).toBeGreaterThan(0);
+
+    // Verify only owner@campusbite.internal remains
+    const remainingAdmins = await prisma.user.findMany({ where: { role: Role.ADMIN } });
+    expect(remainingAdmins.length).toBe(1);
+    expect(remainingAdmins[0].email).toBe('owner@campusbite.internal');
+  });
 });
+
