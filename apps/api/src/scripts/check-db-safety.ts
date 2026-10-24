@@ -1,17 +1,21 @@
 import dotenv from 'dotenv';
 import path from 'path';
-import { getDatabaseSafetyReport, assertSafeTestDatabase } from '../database/safety-guard.js';
+import { getDatabaseSafetyReport, assertSafeTestDatabase, findMonorepoRoot } from '../database/safety-guard.js';
 import { getSanitizedConnectionInfo } from '../database/connection-url.js';
+
+const repoRoot = findMonorepoRoot(process.cwd());
 
 // Preload appropriate environment configuration
 if (process.env.NODE_ENV === 'test') {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env.test.local') });
-  dotenv.config({ path: path.resolve(process.cwd(), '.env.test') });
-  dotenv.config({ path: path.resolve(process.cwd(), 'apps/api/.env.test.local') });
-  dotenv.config({ path: path.resolve(process.cwd(), 'apps/api/.env.test') });
+  dotenv.config({ path: path.resolve(repoRoot, 'apps/api/.env.test.local') });
+  dotenv.config({ path: path.resolve(repoRoot, '.env.test.local') });
+  dotenv.config({ path: path.resolve(repoRoot, 'apps/api/.env.test') });
+  dotenv.config({ path: path.resolve(repoRoot, '.env.test') });
 } else {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-  dotenv.config({ path: path.resolve(process.cwd(), 'apps/api/.env') });
+  dotenv.config({ path: path.resolve(repoRoot, 'apps/api/.env.local') });
+  dotenv.config({ path: path.resolve(repoRoot, '.env.local') });
+  dotenv.config({ path: path.resolve(repoRoot, 'apps/api/.env') });
+  dotenv.config({ path: path.resolve(repoRoot, '.env') });
 }
 
 /**
@@ -54,34 +58,34 @@ function runDiagnostic(): void {
     console.log('Validating against Test Safety Policies:');
     try {
       assertSafeTestDatabase(rawUrl, 'Safety Diagnostic CLI');
-      console.log('✅ TEST SAFETY GATE           : PASSED (Approved isolated test target)');
+      console.log('[PASSED] TEST SAFETY GATE           : PASSED (Approved isolated test target)');
       process.exit(0);
     } catch (err: any) {
-      console.error(`❌ TEST SAFETY GATE           : FAILED - ${err.message}`);
+      console.error(`[FAILED] TEST SAFETY GATE           : FAILED - ${err.message}`);
       process.exit(1);
     }
   } else if (currentEnv === 'production') {
     console.log('Validating against Production Safety Policies:');
     const isLocal = connInfo.host === 'localhost' || connInfo.host === '127.0.0.1';
     if (isLocal) {
-      console.error('❌ PRODUCTION SAFETY GATE     : FAILED (Production cannot target localhost)');
+      console.error('[FAILED] PRODUCTION SAFETY GATE     : FAILED (Production cannot target localhost)');
       process.exit(1);
     }
     if (!connInfo.sslMode || connInfo.sslMode === 'disable') {
-      console.error('❌ PRODUCTION SAFETY GATE     : FAILED (Production requires SSL mode)');
+      console.error('[FAILED] PRODUCTION SAFETY GATE     : FAILED (Production requires SSL mode)');
       process.exit(1);
     }
-    console.log('✅ PRODUCTION SAFETY GATE     : PASSED (Target matches production criteria)');
+    console.log('[PASSED] PRODUCTION SAFETY GATE     : PASSED (Target matches production criteria)');
     process.exit(0);
   } else {
     // Development mode
     console.log('Validating Development Target:');
     if (connInfo.isNeon) {
-      console.log('⚠️  NOTICE                      : Target is a Neon Cloud Database.');
+      console.log('[NOTICE] Target is a Neon Cloud Database.');
     } else {
-      console.log('ℹ️  Target                     : Local development database.');
+      console.log('[INFO] Target                       : Local development database.');
     }
-    console.log('✅ SAFETY AUDIT               : PASSED for development use.');
+    console.log('[PASSED] SAFETY AUDIT               : PASSED for development use.');
     process.exit(0);
   }
 }

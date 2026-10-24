@@ -1,4 +1,32 @@
+import fs from 'fs';
+import path from 'path';
 import { DatabaseConnectionInfo, getSanitizedConnectionInfo } from './connection-url.js';
+
+/**
+ * Locates the monorepo root directory containing the root package.json with workspaces.
+ * Works seamlessly whether executed from repo root, apps/api workspace, or nested directories.
+ */
+export function findMonorepoRoot(startDir = process.cwd()): string {
+  let current = path.resolve(startDir);
+  while (true) {
+    const pkgPath = path.join(current, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        if (pkg.workspaces) {
+          return current;
+        }
+      } catch {
+        // continue searching upwards
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return startDir;
+    }
+    current = parent;
+  }
+}
 
 export class DatabaseSafetyError extends Error {
   public readonly code = 'DATABASE_SAFETY_VIOLATION';
@@ -283,4 +311,225 @@ export function assertTestCleanupCapability(
   }
 
   assertSafeTestDatabase(rawUrl || process.env.DATABASE_URL, context);
+}
+
+/**
+ * Asserts that a database target is an approved, isolated local development database.
+ * Rejects any cloud, Neon, production host, or production database name.
+ */
+export function assertSafeDevelopmentDatabase(
+  rawUrl?: string,
+  context = 'Development Database Operation'
+): DatabaseConnectionInfo {
+  if (!rawUrl || typeof rawUrl !== 'string' || !rawUrl.trim()) {
+    throw new DatabaseSafetyError(
+      `CRITICAL SAFETY VIOLATION: Database URL is absent or empty in context "${context}".`,
+      { host: 'none', database: 'none' }
+    );
+  }
+
+  let info: DatabaseConnectionInfo;
+  try {
+    info = getSanitizedConnectionInfo(rawUrl);
+  } catch (err: any) {
+    throw new DatabaseSafetyError(
+      `CRITICAL SAFETY VIOLATION: Database URL is malformed in context "${context}": ${err?.message || String(err)}`,
+      { host: 'unparseable', database: 'unparseable' }
+    );
+  }
+
+  if (info.provider !== 'postgresql' && info.provider !== 'postgres') {
+    throw new DatabaseSafetyError(
+      `CRITICAL SAFETY VIOLATION: Database provider "${info.provider}" is invalid. Expected "postgresql" or "postgres". Context: "${context}".`,
+      { host: info.host, database: info.database }
+    );
+  }
+
+  // 1. Forbid cloud / production hosts
+  if (isProhibitedProductionHost(info.host) || info.isNeon) {
+    throw new DatabaseSafetyError(
+      `CRITICAL SAFETY VIOLATION: Refusing to perform ${context} against cloud/production database "${info.host}". Development operations are strictly restricted to local database targets.`,
+      { host: info.host, database: info.database }
+    );
+  }
+
+  // 2. Must be a local host
+  const normalizedHost = info.host.toLowerCase().replace(/^\[|\]$/g, '');
+  const localHosts = ['localhost', '127.0.0.1', '::1'];
+  if (!localHosts.includes(normalizedHost)) {
+    throw new DatabaseSafetyError(
+      `CRITICAL SAFETY VIOLATION: Host "${info.host}" is not an approved local development host in context "${context}". Allowed: [${localHosts.join(', ')}].`,
+      { host: info.host, database: info.database }
+    );
+  }
+
+  // 3. Forbid production database names
+  const normalizedDb = info.database.toLowerCase();
+  if (normalizedDb === 'campusbite' || normalizedDb === 'production' || normalizedDb === 'prod') {
+    throw new DatabaseSafetyError(
+      `CRITICAL SAFETY VIOLATION: Target database "${info.database}" is a production database name. Development commands cannot target production databases.`,
+      { host: info.host, database: info.database }
+    );
+  }
+
+  return info;
+}
+
+/**
+ * Asserts that NODE_ENV is permissible for running local development migrations (prisma migrate dev).
+ * Strictly rejects 'production', 'prod', 'test', 'staging', 'ci', and any non-development environment.
+ */
+export function assertSafeMigrateDevEnvironment(nodeEnv?: string): string {
+  const raw = (nodeEnv || '').trim().toLowerCase();
+  if (raw === 'production' || raw === 'prod') {
+    throw new DatabaseSafetyError(
+      'Cannot execute development migrations (prisma migrate dev) in a production environment (NODE_ENV="production"). For production deployments, use "npm run db:deploy".'
+    );
+  }
+  if (raw && raw !== 'development' && raw !== 'dev') {
+    throw new DatabaseSafetyError(
+      `Cannot execute development migrations in environment NODE_ENV="${nodeEnv}". Development migrations are strictly permitted only in "development" mode.`
+    );
+  }
+  return raw || 'development';
+}
+
+/**
+ * Validates that production migrations use dedicated migration credentials and a direct unpooled endpoint.
+ */
+export function assertSafeProductionMigration(
+  migrationUrl?: string,
+  context = 'Production Migration'
+): DatabaseConnectionInfo {
+  if (!migrationUrl || typeof migrationUrl !== 'string' || !migrationUrl.trim()) {
+    throw new DatabaseSafetyError(
+      `CRITICAL DEPLOYMENT VIOLATION: In production, migrations require dedicated migration credentials. Neither MIGRATION_DATABASE_URL nor DIRECT_URL is configured. Context: "${context}".`,
+      { host: 'none', database: 'none' }
+    );
+  }
+
+  let info: DatabaseConnectionInfo;
+  let parsedUrl: URL;
+  try {
+    info = getSanitizedConnectionInfo(migrationUrl);
+    parsedUrl = new URL(migrationUrl);
+  } catch (err: any) {
+    throw new DatabaseSafetyError(
+      `CRITICAL DEPLOYMENT VIOLATION: Migration database URL is malformed in context "${context}": ${err?.message || String(err)}`,
+      { host: 'unparseable', database: 'unparseable' }
+    );
+  }
+
+  if (info.provider !== 'postgresql' && info.provider !== 'postgres') {
+    throw new DatabaseSafetyError(
+      `CRITICAL DEPLOYMENT VIOLATION: Database provider "${info.provider}" is invalid. Expected "postgresql" or "postgres". Context: "${context}".`,
+      { host: info.host, database: info.database }
+    );
+  }
+
+  // 1. Direct unpooled endpoint required in production
+  if (info.isPooled || parsedUrl.searchParams.get('pgbouncer') === 'true') {
+    throw new DatabaseSafetyError(
+      `CRITICAL DEPLOYMENT VIOLATION: Production migrations cannot be executed against a pooled (-pooler) PgBouncer endpoint. In serverless PostgreSQL (Neon), pooled endpoints do not support migration advisory locks. You must configure MIGRATION_DATABASE_URL using the direct compute endpoint. Context: "${context}".`,
+      { host: info.host, database: info.database }
+    );
+  }
+
+  // 2. Dedicated campusbite_migrator role required
+  const username = decodeURIComponent(parsedUrl.username || '');
+  if (username === 'campusbite_app') {
+    throw new DatabaseSafetyError(
+      `CRITICAL DEPLOYMENT VIOLATION: Attempted to run migrations with runtime application user "campusbite_app". This user is restricted to least-privilege DML operations and will be rejected by PostgreSQL DDL. Configure MIGRATION_DATABASE_URL with "campusbite_migrator". Context: "${context}".`,
+      { host: info.host, database: info.database }
+    );
+  }
+
+  if (username !== 'campusbite_migrator') {
+    throw new DatabaseSafetyError(
+      `CRITICAL DEPLOYMENT VIOLATION: Production migrations require the dedicated "campusbite_migrator" role. Attempted to run with role "${username || 'unspecified'}". Context: "${context}".`,
+      { host: info.host, database: info.database }
+    );
+  }
+
+  return info;
+}
+
+export interface ResolvedMigrationTarget {
+  migrationUrl: string;
+  sourceVariable: 'MIGRATION_DATABASE_URL' | 'DIRECT_URL' | 'DATABASE_URL';
+  targetInfo: DatabaseConnectionInfo;
+  nodeEnv: string;
+}
+
+/**
+ * Resolves and strictly validates the database connection URL for running Prisma migrations.
+ * Guarantees that:
+ * 1. Development mode NEVER falls back to or touches a production or Neon endpoint.
+ * 2. Production migrations require an explicit MIGRATION_DATABASE_URL or DIRECT_URL with campusbite_migrator.
+ * 3. Test mode targets only approved isolated test databases.
+ */
+export function resolveAndValidateMigrationUrl(options?: {
+  nodeEnv?: string;
+  envVars?: Record<string, string | undefined>;
+}): ResolvedMigrationTarget {
+  const env = options?.envVars || process.env;
+  const nodeEnv = (options?.nodeEnv || env.NODE_ENV || 'development').toLowerCase();
+
+  const migrationUrlExplicit = env.MIGRATION_DATABASE_URL;
+  const directUrlExplicit = env.DIRECT_URL;
+  const databaseUrl = env.DATABASE_URL;
+
+  let resolvedUrl: string | undefined;
+  let sourceVariable: 'MIGRATION_DATABASE_URL' | 'DIRECT_URL' | 'DATABASE_URL';
+
+  if (migrationUrlExplicit && migrationUrlExplicit.trim()) {
+    resolvedUrl = migrationUrlExplicit.trim();
+    sourceVariable = 'MIGRATION_DATABASE_URL';
+  } else if (directUrlExplicit && directUrlExplicit.trim()) {
+    resolvedUrl = directUrlExplicit.trim();
+    sourceVariable = 'DIRECT_URL';
+  } else {
+    // No explicit migration URL provided
+    if (nodeEnv === 'production') {
+      throw new DatabaseSafetyError(
+        'CRITICAL DEPLOYMENT ERROR: In production, migrations require dedicated migration credentials. Neither MIGRATION_DATABASE_URL nor DIRECT_URL is configured. The runtime role "campusbite_app" has restricted DML-only privileges and cannot perform DDL migrations.'
+      );
+    }
+
+    if (!databaseUrl || !databaseUrl.trim()) {
+      throw new DatabaseSafetyError(
+        'CRITICAL DEPLOYMENT ERROR: No database connection URL found for migrations. DATABASE_URL is not set.'
+      );
+    }
+
+    resolvedUrl = databaseUrl.trim();
+    sourceVariable = 'DATABASE_URL';
+  }
+
+  const info = getSanitizedConnectionInfo(resolvedUrl);
+
+  // Policy Enforcement based on environment and target
+  if (nodeEnv === 'production') {
+    assertSafeProductionMigration(resolvedUrl, 'resolveAndValidateMigrationUrl (production)');
+  } else if (nodeEnv === 'test') {
+    assertSafeTestDatabase(resolvedUrl, 'resolveAndValidateMigrationUrl (test)');
+  } else {
+    // Development mode:
+    // If the resolved target is Neon or any prohibited cloud host, FAIL CLOSED immediately!
+    // A development migration command must NEVER run against production or cloud.
+    if (isProhibitedProductionHost(info.host) || info.isNeon) {
+      throw new DatabaseSafetyError(
+        `CRITICAL SAFETY VIOLATION: Migration command running in development mode resolved to a cloud/production database target ("${info.host}/${info.database}"). Refusing to execute migrations. Development migrations are strictly restricted to local database targets (e.g. localhost:5432/campusbite_dev). Never point local development migrations at production.`
+      );
+    }
+
+    assertSafeDevelopmentDatabase(resolvedUrl, 'resolveAndValidateMigrationUrl (development)');
+  }
+
+  return {
+    migrationUrl: resolvedUrl,
+    sourceVariable,
+    targetInfo: info,
+    nodeEnv
+  };
 }

@@ -2,22 +2,26 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { z } from 'zod';
 import { sanitizeAndEnhanceDbUrl } from '../database/connection-url.js';
-import { assertSafeTestDatabase } from '../database/safety-guard.js';
+import { assertSafeTestDatabase, findMonorepoRoot } from '../database/safety-guard.js';
+
+const repoRoot = findMonorepoRoot(process.cwd());
 
 // Environment variable resolution:
 // When running in test mode (NODE_ENV === 'test'), strictly prioritize dedicated test env files
 // and forbid loading production/development credentials from .env or apps/api/.env
 if (process.env.NODE_ENV === 'test') {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env.test.local') });
-  dotenv.config({ path: path.resolve(process.cwd(), '.env.test') });
-  dotenv.config({ path: path.resolve(process.cwd(), 'apps/api/.env.test.local') });
-  dotenv.config({ path: path.resolve(process.cwd(), 'apps/api/.env.test') });
+  dotenv.config({ path: path.resolve(repoRoot, 'apps/api/.env.test.local') });
+  dotenv.config({ path: path.resolve(repoRoot, '.env.test.local') });
+  dotenv.config({ path: path.resolve(repoRoot, 'apps/api/.env.test') });
+  dotenv.config({ path: path.resolve(repoRoot, '.env.test') });
 } else if (process.env.NODE_ENV !== 'production' || !process.env.DATABASE_URL) {
   // In production, environment variables provided by the container/orchestrator (e.g. Render)
   // are the authoritative source of truth. Only load local .env files when running locally
   // or when DATABASE_URL is not already supplied in the process environment.
-  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-  dotenv.config({ path: path.resolve(process.cwd(), 'apps/api/.env') });
+  dotenv.config({ path: path.resolve(repoRoot, 'apps/api/.env.local') });
+  dotenv.config({ path: path.resolve(repoRoot, '.env.local') });
+  dotenv.config({ path: path.resolve(repoRoot, 'apps/api/.env') });
+  dotenv.config({ path: path.resolve(repoRoot, '.env') });
 }
 
 const envSchema = z
@@ -75,6 +79,21 @@ const envSchema = z
           path: ['DATABASE_URL'],
           message: 'Production DATABASE_URL must reference a managed production database, not localhost.'
         });
+      }
+
+      try {
+        const parsedUrl = new URL(data.DATABASE_URL);
+        const username = decodeURIComponent(parsedUrl.username || '');
+        if (username === 'campusbite_migrator') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['DATABASE_URL'],
+            message:
+              'CRITICAL SECURITY: In production, API runtime DATABASE_URL must use the least-privilege role "campusbite_app", not the migration role "campusbite_migrator".'
+          });
+        }
+      } catch {
+        // Driver handles URL parsing issues
       }
     }
   });

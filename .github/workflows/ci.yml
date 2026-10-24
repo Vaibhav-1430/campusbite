@@ -44,8 +44,9 @@ jobs:
 
       - name: Validate Database Migrations on Fresh DB
         env:
+          NODE_ENV: test
           DATABASE_URL: postgresql://postgres:password@localhost:5432/campusbite_ci?schema=public
-        run: npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
+        run: npm run db:deploy
 
       - name: Verify Test Database Safety Compliance
         env:

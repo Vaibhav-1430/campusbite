@@ -2,18 +2,11 @@ import { prisma } from '../database/prisma.js';
 import { hashPassword } from '../utils/password.js';
 import { Role } from '@campusbite/shared';
 import { getSanitizedConnectionInfo } from '../database/connection-url.js';
-import { isProhibitedProductionHost } from '../database/safety-guard.js';
+import { assertSafeDevelopmentDatabase } from '../database/safety-guard.js';
 import { env } from '../config/env.js';
 
 async function main() {
-  const dbInfo = getSanitizedConnectionInfo(env.DATABASE_URL);
-  if (isProhibitedProductionHost(dbInfo.host) || dbInfo.isNeon || env.NODE_ENV === 'production') {
-    console.error(
-      `CRITICAL SAFETY ABORT: Refusing to run development seed against production target "${dbInfo.host}/${dbInfo.database}".`
-    );
-    process.exit(1);
-  }
-
+  const dbInfo = assertSafeDevelopmentDatabase(env.DATABASE_URL, 'seed-dev');
   console.log(`Seeding development database (${dbInfo.database})...`);
 
   // 1. Staff Users
