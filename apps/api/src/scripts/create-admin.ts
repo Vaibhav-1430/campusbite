@@ -8,6 +8,7 @@ export interface CreateAdminOptions {
   email?: string;
   name?: string;
   password?: string;
+  removeOtherAdmins?: boolean;
 }
 
 export interface CreateAdminResult {
@@ -19,8 +20,61 @@ export interface CreateAdminResult {
     role: Role;
     isActive: boolean;
   };
+  removedOtherAdminsCount?: number;
   message: string;
 }
+
+/**
+ * Safely removes other administrator accounts while strictly preserving non-admin staff accounts (COUNTER, KITCHEN).
+ * Reassigns or cleans up dependent records (audit logs, order histories, adjustments) to prevent foreign key violations.
+ */
+export const removeOtherAdminAccounts = async (preserveUserId: string, preserveEmail: string): Promise<number> => {
+  const otherAdmins = await prisma.user.findMany({
+    where: {
+      role: Role.ADMIN,
+      id: { not: preserveUserId },
+      email: { not: preserveEmail.toLowerCase() }
+    },
+    select: { id: true, email: true }
+  });
+
+  if (otherAdmins.length === 0) {
+    return 0;
+  }
+
+  for (const admin of otherAdmins) {
+    // 1. Audit logs: delete audit logs where actorId = admin.id
+    await prisma.auditLog.deleteMany({ where: { actorId: admin.id } });
+
+    // 2. Status history entries: delete entries changed by this admin
+    await prisma.orderStatusHistory.deleteMany({ where: { changedById: admin.id } });
+
+    // 3. Prep adjustments: delete adjustments made by this admin
+    await prisma.preparationTimeAdjustment.deleteMany({ where: { staffId: admin.id } });
+
+    // 4. Inventory movements: delete movements performed by this admin
+    await prisma.inventoryMovement.deleteMany({ where: { performedById: admin.id } });
+
+    // 5. Orders: reassign createdBy or clear assignedTo to preserve order integrity
+    await prisma.order.updateMany({
+      where: { createdById: admin.id },
+      data: { createdById: preserveUserId }
+    });
+    await prisma.order.updateMany({
+      where: { assignedToId: admin.id },
+      data: { assignedToId: null }
+    });
+
+    // 6. Delete other admin safely
+    await prisma.user.delete({
+      where: { id: admin.id }
+    });
+
+    logger.info(`Safely removed previous administrator: ${admin.email}`, 'CreateAdmin');
+  }
+
+  return otherAdmins.length;
+};
 
 /**
  * Creates a new administrator account safely.
@@ -28,23 +82,34 @@ export interface CreateAdminResult {
  * - Checks if the email already exists to prevent duplicate creation or overwrites.
  * - Securely hashes the password with bcrypt (salt cost factor 10).
  * - Never logs or exposes plaintext passwords, hashes, or tokens.
+ * - Optionally removes all other administrator accounts while preserving staff accounts.
  */
 export const createAdminAccount = async (options: CreateAdminOptions = {}): Promise<CreateAdminResult> => {
+  const positionalArgs = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
+  const flags = new Set(process.argv.slice(2).filter((arg) => arg.startsWith('--')));
+
   const email = (
     options.email ||
     process.env.ADMIN_EMAIL ||
-    process.argv[2] ||
-    'owner@campusbite.internal'
+    positionalArgs[0] ||
+    'cafe47@campusbite.internal'
   ).trim().toLowerCase();
 
   const name = (
     options.name ||
     process.env.ADMIN_NAME ||
-    process.argv[3] ||
-    'Campus Owner'
+    positionalArgs[1] ||
+    'Campus Administrator'
   ).trim();
 
-  const password = options.password || process.env.ADMIN_PASSWORD || process.argv[4] || 'Adminhumai47';
+  const password = options.password || process.env.ADMIN_PASSWORD || positionalArgs[2] || 'Adminhumai47';
+
+  const shouldRemoveOtherAdmins =
+    options.removeOtherAdmins !== undefined
+      ? options.removeOtherAdmins
+      : flags.has('--remove-other-admins') ||
+        flags.has('--remove-all-other-admins') ||
+        process.env.REMOVE_OTHER_ADMINS === 'true';
 
   // 1. Validate Email format
   if (!email.includes('@') || !email.includes('.')) {
@@ -74,11 +139,20 @@ export const createAdminAccount = async (options: CreateAdminOptions = {}): Prom
     });
 
     if (existing) {
-      logger.warn(`Account already exists for email "${email}" with role "${existing.role}". No modifications made.`, 'CreateAdmin');
+      logger.warn(`Account already exists for email "${email}" with role "${existing.role}". No overwrite performed.`, 'CreateAdmin');
+      
+      let removedCount = 0;
+      if (shouldRemoveOtherAdmins) {
+        removedCount = await removeOtherAdminAccounts(existing.id, email);
+      }
+
       return {
         status: 'ALREADY_EXISTS',
         user: existing,
-        message: `An account with email "${email}" already exists (role: ${existing.role}). Existing accounts cannot be overwritten.`
+        removedOtherAdminsCount: removedCount,
+        message: `An account with email "${email}" already exists (role: ${existing.role}). Existing accounts cannot be overwritten.${
+          removedCount > 0 ? ` Removed ${removedCount} other administrator account(s).` : ''
+        }`
       };
     }
 
@@ -106,10 +180,18 @@ export const createAdminAccount = async (options: CreateAdminOptions = {}): Prom
 
     logger.info(`Administrator account created successfully: id=${user.id}, email=${user.email}`, 'CreateAdmin');
 
+    let removedCount = 0;
+    if (shouldRemoveOtherAdmins) {
+      removedCount = await removeOtherAdminAccounts(user.id, email);
+    }
+
     return {
       status: 'CREATED',
       user,
-      message: `Administrator account successfully created for ${user.email}.`
+      removedOtherAdminsCount: removedCount,
+      message: `Administrator account successfully created for ${user.email}.${
+        removedCount > 0 ? ` Removed ${removedCount} other administrator account(s).` : ''
+      }`
     };
   } finally {
     if (process.argv[1]?.includes('create-admin')) {
@@ -124,6 +206,9 @@ if (process.argv[1]?.includes('create-admin')) {
     .then((result) => {
       if (result.status === 'CREATED') {
         console.log(`SUCCESS: Administrator account created for ${result.user?.email}`);
+        if (result.removedOtherAdminsCount && result.removedOtherAdminsCount > 0) {
+          console.log(`SUCCESS: Removed ${result.removedOtherAdminsCount} other administrator account(s).`);
+        }
         process.exit(0);
       } else if (result.status === 'ALREADY_EXISTS') {
         console.log(`NOTICE: ${result.message}`);
