@@ -8,13 +8,14 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace=@campusbite/shared && npm run build --workspace=@campusbite/api && npm run build --workspace=@campusbite/web",
-    "build:backend": "npm run build --workspace=@campusbite/shared && npm run build --workspace=@campusbite/api",
+    "build": "npm run db:generate && npm run build --workspace=@campusbite/shared && npm run build --workspace=@campusbite/api && npm run build --workspace=@campusbite/web",
+    "build:backend": "npm run db:generate && npm run build --workspace=@campusbite/shared && npm run build --workspace=@campusbite/api",
     "build:frontend": "npm run build --workspace=@campusbite/shared && npm run build --workspace=@campusbite/web",
     "dev": "npm run dev --workspaces --if-present",
     "dev:api": "npm run dev --workspace=@campusbite/api",
     "dev:web": "npm run dev --workspace=@campusbite/web",
     "test": "npm run test --workspaces --if-present",
+    "db:generate": "npm run db:generate --workspace=@campusbite/api",
     "db:migrate": "npm run db:migrate --workspace=@campusbite/api",
     "db:deploy": "npm run db:deploy --workspace=@campusbite/api",
     "db:seed:admin": "npm run db:seed:admin --workspace=@campusbite/api"
