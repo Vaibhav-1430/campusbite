@@ -120,6 +120,9 @@ export const AdminAnalyticsPage: React.FC = () => {
       }
     } catch (err) {
       if (err instanceof ApiError) {
+        if (err.statusCode === 401 || err.code === 'USER_NOT_FOUND') {
+          return;
+        }
         setErrorMessage(err.message);
       } else {
         setErrorMessage('Failed to load analytics data.');

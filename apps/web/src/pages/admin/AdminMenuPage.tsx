@@ -83,6 +83,10 @@ export const AdminMenuPage: React.FC = () => {
       setStockItems(stockRes.items);
     } catch (err) {
       if (err instanceof ApiError) {
+        if (err.statusCode === 401 || err.code === 'USER_NOT_FOUND') {
+          // Handled by unauthorizedHandler which clears session and triggers redirect
+          return;
+        }
         setErrorMessage(err.message);
       } else {
         setErrorMessage('Failed to load menu data.');

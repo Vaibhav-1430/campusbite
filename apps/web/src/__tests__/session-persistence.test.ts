@@ -135,6 +135,34 @@ describe('Frontend Session Persistence & Auth Client Regression Tests', () => {
       // Auth state callback must be triggered to redirect user to login
       expect(unauthorizedSpy).toHaveBeenCalledTimes(1);
     });
+
+    it('should immediately clear stored token and invoke unauthorizedHandler on USER_NOT_FOUND 401', async () => {
+      setStoredToken('stale-deleted-user-jwt');
+
+      const unauthorizedSpy = vi.fn();
+      setOnUnauthorized(unauthorizedSpy);
+
+      global.fetch = vi.fn().mockImplementation(async () => {
+        return {
+          ok: false,
+          status: 401,
+          json: async () => ({
+            success: false,
+            error: {
+              code: 'USER_NOT_FOUND',
+              message: 'User account not found'
+            }
+          })
+        } as unknown as Response;
+      });
+
+      await expect(apiRequest('/auth/me')).rejects.toThrow('User account not found');
+
+      // Stale token must be wiped from storage immediately
+      expect(getStoredToken()).toBeNull();
+      // Auth callback must be notified to reset user in-memory state
+      expect(unauthorizedSpy).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('downloadCsv Bearer Token Attachment', () => {
