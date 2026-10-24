@@ -36,7 +36,8 @@ export const bootstrapAdmin = async () => {
     const hasUpper = /[A-Z]/.test(password);
     const hasLower = /[a-z]/.test(password);
     const hasNumber = /[0-9]/.test(password);
-    if (!hasUpper || !hasLower || !hasNumber) {
+    const isHighEntropySecret = password.length >= 32;
+    if (!isHighEntropySecret && (!hasUpper || !hasLower || !hasNumber)) {
       throw new Error('Initial admin password must include uppercase, lowercase, and numbers.');
     }
 
@@ -56,7 +57,10 @@ export const bootstrapAdmin = async () => {
     return admin;
   } catch (err) {
     logger.error('Failed to bootstrap root administrator', 'BootstrapAdmin', { error: String(err) });
-    process.exit(1);
+    if (process.argv[1]?.includes('bootstrap-admin')) {
+      process.exit(1);
+    }
+    throw err;
   } finally {
     await prisma.$disconnect();
   }
@@ -64,5 +68,5 @@ export const bootstrapAdmin = async () => {
 
 // Execute if run directly from CLI
 if (process.argv[1]?.includes('bootstrap-admin')) {
-  bootstrapAdmin();
+  bootstrapAdmin().catch(() => process.exit(1));
 }

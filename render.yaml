@@ -19,7 +19,7 @@ services:
       - key: JWT_EXPIRES_IN
         value: 8h
       - key: CORS_ORIGIN
-        sync: false
+        value: https://campusbite112.netlify.app
       - key: INITIAL_ADMIN_EMAIL
         sync: false
       - key: INITIAL_ADMIN_PASSWORD

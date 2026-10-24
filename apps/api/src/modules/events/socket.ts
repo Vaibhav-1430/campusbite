@@ -5,6 +5,7 @@ import { COOKIE_NAME, verifyToken, verifyTrackingToken } from '../../utils/token
 import { prisma } from '../../database/prisma.js';
 import { logger } from '../../utils/logger.js';
 import { env } from '../../config/env.js';
+import { isOriginAllowed } from '../../config/cors.js';
 
 const parseCookieString = (cookieHeader?: string): Record<string, string> => {
   if (!cookieHeader) return {};
@@ -19,11 +20,15 @@ let ioInstance: SocketIOServer | null = null;
 const userSocketsMap = new Map<string, Set<string>>(); // userId -> Set of socketIds
 
 export const initSocketIO = (httpServer: HttpServer): SocketIOServer => {
-  const allowedOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim());
-
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: allowedOrigins,
+      origin: (origin, callback) => {
+        if (isOriginAllowed(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error('Origin not allowed by Socket.IO CORS policy'));
+        }
+      },
       credentials: true
     }
   });

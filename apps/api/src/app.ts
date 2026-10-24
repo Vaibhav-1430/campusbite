@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
+import { corsOptions } from './config/cors.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { NotFoundError, ForbiddenError } from './utils/errors.js';
 import authRoutes from './modules/auth/auth.routes.js';
@@ -24,24 +25,14 @@ export const createApp = () => {
   // Trust first proxy for correct client IP detection behind reverse proxies
   app.set('trust proxy', 1);
 
-  // Security Headers
-  app.use(helmet());
+  // 1. CORS Configuration & Preflight Handling (Before all routes and parsing)
+  app.use(cors(corsOptions));
+  app.options('*', cors(corsOptions));
 
-  // CORS Configuration
-  const allowedOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim());
+  // 2. Security Headers (Configured to permit cross-origin API consumption by frontend SPA)
   app.use(
-    cors({
-      origin: (origin, callback) => {
-        // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
-        if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
-          callback(null, true);
-        } else {
-          callback(new ForbiddenError(`Origin ${origin} not allowed by CORS policy.`, 'CORS_NOT_ALLOWED'));
-        }
-      },
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Idempotency-Key']
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' }
     })
   );
 

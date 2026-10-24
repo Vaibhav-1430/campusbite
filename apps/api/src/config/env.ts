@@ -14,7 +14,7 @@ const envSchema = z
     JWT_SECRET: z.string({ required_error: 'JWT_SECRET is required' }).min(32, 'JWT_SECRET must be at least 32 characters'),
     JWT_EXPIRES_IN: z.string().default('8h'),
     COOKIE_DOMAIN: z.string().default(''),
-    CORS_ORIGIN: z.string().default('http://localhost:5173,http://127.0.0.1:5173'),
+    CORS_ORIGIN: z.string().default('http://localhost:5173,http://127.0.0.1:5173,https://campusbite112.netlify.app'),
     INITIAL_ADMIN_NAME: z.string().default('System Administrator'),
     INITIAL_ADMIN_EMAIL: z.string().default('admin@campusbite.internal'),
     INITIAL_ADMIN_PASSWORD: z.string().default('AdminPassword123!')
