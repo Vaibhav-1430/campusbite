@@ -14,6 +14,7 @@ import orderRoutes from './modules/orders/order.routes.js';
 import trackingRoutes, { trackingOrderAliasHandler } from './modules/tracking/tracking.routes.js';
 import inventoryRoutes from './modules/inventory/inventory.routes.js';
 import analyticsRoutes from './modules/analytics/analytics.routes.js';
+import adminRoutes from './modules/admin/admin.routes.js';
 import { prisma } from './database/prisma.js';
 import { sendSuccess } from './utils/response.js';
 
@@ -94,6 +95,7 @@ export const createApp = () => {
   apiRouter.use('/tracking', trackingRoutes);
   apiRouter.use('/inventory', inventoryRoutes);
   apiRouter.use('/analytics', analyticsRoutes);
+  apiRouter.use('/admin', adminRoutes);
   apiRouter.post('/orders/track', trackingOrderAliasHandler);
 
   app.use('/api/v1', apiRouter);

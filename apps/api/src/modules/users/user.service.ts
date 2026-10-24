@@ -99,6 +99,10 @@ export const updateUserStatus = async (
     throw new BadRequestError('You cannot deactivate your own administrative account.', 'CANNOT_SELF_DEACTIVATE');
   }
 
+  if (user.role === Role.ADMIN && user.id !== actorId && !isActive) {
+    throw new BadRequestError('Administrative accounts cannot be deactivated.', 'CANNOT_DEACTIVATE_ADMIN');
+  }
+
   // If deactivating, increment tokenVersion to immediately kill all active JWT sessions
   const updatedUser = await prisma.user.update({
     where: { id: userId },
@@ -179,4 +183,66 @@ export const resetPassword = async (
   });
 
   return { message: 'Password has been successfully reset. Active sessions revoked.' };
+};
+
+export const deleteUser = async (
+  userId: string,
+  actorId: string,
+  actorRole: Role,
+  ipAddress?: string
+): Promise<{ message: string; deletedUserId: string }> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId }
+  });
+
+  if (!user) {
+    throw new NotFoundError('Staff user not found.', 'USER_NOT_FOUND');
+  }
+
+  if (user.id === actorId) {
+    throw new BadRequestError('You cannot delete your own administrative account.', 'CANNOT_SELF_DELETE');
+  }
+
+  if (user.role === Role.ADMIN) {
+    throw new BadRequestError('Administrative accounts cannot be deleted.', 'CANNOT_DELETE_ADMIN');
+  }
+
+  // Check for foreign key references in operational and audit tables
+  const [orderCount, historyCount, prepCount, movementCount, auditCount] = await Promise.all([
+    prisma.order.count({ where: { OR: [{ createdById: userId }, { assignedToId: userId }] } }),
+    prisma.orderStatusHistory.count({ where: { changedById: userId } }),
+    prisma.preparationTimeAdjustment.count({ where: { staffId: userId } }),
+    prisma.inventoryMovement.count({ where: { performedById: userId } }),
+    prisma.auditLog.count({ where: { actorId: userId } })
+  ]);
+
+  const totalDependencies = orderCount + historyCount + prepCount + movementCount + auditCount;
+  if (totalDependencies > 0) {
+    throw new BadRequestError(
+      'Cannot delete a staff account with recorded business activity or history. Please deactivate the account instead.',
+      'USER_HAS_ACTIVITY'
+    );
+  }
+
+  // Disconnect active sockets
+  disconnectUserSockets(userId);
+
+  await prisma.user.delete({
+    where: { id: userId }
+  });
+
+  await logAudit({
+    actorId,
+    actorRole,
+    action: 'USER_DELETED',
+    entityType: 'User',
+    entityId: userId,
+    metadata: { email: user.email, name: user.name, role: user.role },
+    ipAddress
+  });
+
+  return {
+    message: `Staff member "${user.name}" has been permanently deleted.`,
+    deletedUserId: userId
+  };
 };

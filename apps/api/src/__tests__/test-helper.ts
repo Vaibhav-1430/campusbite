@@ -32,6 +32,7 @@ export const cleanDatabase = async (capability: symbol = TEST_CLEANUP_CAPABILITY
     await prisma.menuItem.deleteMany();
     await prisma.category.deleteMany();
     await prisma.stockItem.deleteMany();
+    await prisma.dailyOrderSequence.deleteMany();
     await prisma.user.deleteMany();
   } catch (error: any) {
     console.error(`Error during test database cleanup: ${error?.message || error}`);

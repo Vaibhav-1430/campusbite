@@ -54,6 +54,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    // Clear staff cart on logout to prevent cart leaking across sessions
+    if (user?.id) {
+      try {
+        localStorage.removeItem(`cafe47_counter_cart_${user.id}`);
+      } catch {}
+    }
     try {
       await apiRequest('/auth/logout', { method: 'POST' });
     } catch (err) {

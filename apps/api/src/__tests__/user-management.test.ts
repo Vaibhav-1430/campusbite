@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
-import { Role } from '@campusbite/shared';
+import { Role, OrderStatus } from '@campusbite/shared';
 import { cleanDatabase, createTestUser } from './test-helper.js';
 import { prisma } from '../database/prisma.js';
 
@@ -146,5 +146,97 @@ describe('User Management API (/api/v1/users)', () => {
 
     expect(loginResponse.status).toBe(200);
     expect(loginResponse.body.success).toBe(true);
+  });
+
+  it('should prevent ADMIN from deleting their own administrative account', async () => {
+    const { user: adminUser, token: adminToken } = await createTestUser({ role: Role.ADMIN });
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${adminUser.id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.error.code).toBe('CANNOT_SELF_DELETE');
+  });
+
+  it('should prevent ADMIN from deleting another administrator', async () => {
+    const { token: adminToken } = await createTestUser({ role: Role.ADMIN });
+    const { user: otherAdmin } = await createTestUser({ role: Role.ADMIN });
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${otherAdmin.id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.error.code).toBe('CANNOT_DELETE_ADMIN');
+  });
+
+  it('should prevent ADMIN from deactivating another administrator', async () => {
+    const { token: adminToken } = await createTestUser({ role: Role.ADMIN });
+    const { user: otherAdmin } = await createTestUser({ role: Role.ADMIN });
+
+    const response = await request(app)
+      .patch(`/api/v1/users/${otherAdmin.id}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ isActive: false });
+
+    expect(response.status).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.error.code).toBe('CANNOT_DEACTIVATE_ADMIN');
+  });
+
+  it('should prevent deleting staff account with recorded business activity and advise deactivation', async () => {
+    const { token: adminToken } = await createTestUser({ role: Role.ADMIN });
+    const { user: staffUser } = await createTestUser({ role: Role.COUNTER });
+
+    // Create an order created by this staff user
+    await prisma.order.create({
+      data: {
+        dailyOrderNumber: '#999',
+        idempotencyKey: 'idem-test-activity-guard',
+        status: OrderStatus.PLACED,
+        totalPaise: 2500,
+        customerPinHash: 'hashed-pin',
+        initialEstimatedMinutes: 10,
+        createdById: staffUser.id
+      }
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${staffUser.id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.error.code).toBe('USER_HAS_ACTIVITY');
+  });
+
+  it('should allow ADMIN to permanently delete a non-admin staff member with zero business records', async () => {
+    const { token: adminToken } = await createTestUser({ role: Role.ADMIN });
+    const { user: freshStaff } = await createTestUser({ role: Role.COUNTER });
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${freshStaff.id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+
+    const checkDb = await prisma.user.findUnique({ where: { id: freshStaff.id } });
+    expect(checkDb).toBeNull();
+  });
+
+  it('should reject non-admin users from deleting accounts with 403 Forbidden', async () => {
+    const { token: counterToken } = await createTestUser({ role: Role.COUNTER });
+    const { user: targetStaff } = await createTestUser({ role: Role.KITCHEN });
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${targetStaff.id}`)
+      .set('Authorization', `Bearer ${counterToken}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('FORBIDDEN');
   });
 });

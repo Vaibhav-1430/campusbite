@@ -19,3 +19,15 @@
     touch-action: manipulation;
   }
 }
+
+/* Ensure injected Netlify badge or floating third-party overlays do not obscure checkout elements */
+#netlify-badge,
+.netlify-badge,
+[data-netlify-badge],
+div[class*="netlify-badge"],
+iframe[src*="netlify.com"] {
+  display: none !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}

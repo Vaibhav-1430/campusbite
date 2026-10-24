@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   CategoryDto,
   MenuItemDto,
@@ -10,6 +10,7 @@ import { apiRequest, ApiError, getStoredToken } from '../../services/api.js';
 import { Navbar } from '../../components/common/Navbar.js';
 import { Badge } from '../../components/common/Badge.js';
 import { Modal } from '../../components/common/Modal.js';
+import { useAuth } from '../../context/AuthContext.js';
 import {
   Search,
   ShoppingCart,
@@ -33,6 +34,10 @@ interface CartItem {
 }
 
 export const CounterPOSPage: React.FC = () => {
+  const { user: currentUser } = useAuth();
+  const cartStorageKey = currentUser?.id ? `cafe47_counter_cart_${currentUser.id}` : null;
+  const hasRestoredCartRef = useRef(false);
+
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItemDto[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('all');
@@ -44,6 +49,7 @@ export const CounterPOSPage: React.FC = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [cartNotification, setCartNotification] = useState<string | null>(null);
   const [lowStockToast, setLowStockToast] = useState<string | null>(null);
 
   // Placed Order Success Modal
@@ -75,6 +81,62 @@ export const CounterPOSPage: React.FC = () => {
       ]);
       setCategories(catsRes.categories);
       setMenuItems(itemsRes.items);
+
+      // Restore persisted counter cart if present and not yet restored
+      if (cartStorageKey && !hasRestoredCartRef.current) {
+        try {
+          const raw = localStorage.getItem(cartStorageKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const restoredMap = new Map<string, CartItem>();
+              const removedNames: string[] = [];
+
+              for (const saved of parsed) {
+                if (
+                  !saved ||
+                  typeof saved.menuItemId !== 'string' ||
+                  typeof saved.quantity !== 'number' ||
+                  saved.quantity <= 0
+                ) {
+                  continue;
+                }
+                const foundItem = itemsRes.items.find((item) => item.id === saved.menuItemId);
+                if (!foundItem || !foundItem.isAvailable || (foundItem.stockItem && foundItem.stockItem.isOutOfStock)) {
+                  removedNames.push(foundItem ? foundItem.name : 'Unknown Item');
+                  continue;
+                }
+
+                const maxQty = foundItem.stockItem
+                  ? Math.min(saved.quantity, foundItem.stockItem.currentQuantity)
+                  : saved.quantity;
+
+                if (maxQty > 0) {
+                  restoredMap.set(foundItem.id, {
+                    menuItem: foundItem,
+                    quantity: maxQty,
+                    notes: typeof saved.notes === 'string' ? saved.notes : ''
+                  });
+                }
+              }
+
+              if (removedNames.length > 0) {
+                setCartNotification(
+                  `Notice: Item(s) "${removedNames.join(', ')}" were removed from your saved cart because they are no longer available.`
+                );
+              }
+
+              setCart(restoredMap);
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to restore counter cart from localStorage', e);
+        } finally {
+          hasRestoredCartRef.current = true;
+        }
+      } else if (!hasRestoredCartRef.current) {
+        hasRestoredCartRef.current = true;
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setErrorMessage(err.message);
@@ -85,6 +147,82 @@ export const CounterPOSPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Fallback restoration if currentUser becomes available after initial loadMenuData
+  useEffect(() => {
+    if (cartStorageKey && !hasRestoredCartRef.current && menuItems.length > 0) {
+      try {
+        const raw = localStorage.getItem(cartStorageKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const restoredMap = new Map<string, CartItem>();
+            const removedNames: string[] = [];
+
+            for (const saved of parsed) {
+              if (
+                !saved ||
+                typeof saved.menuItemId !== 'string' ||
+                typeof saved.quantity !== 'number' ||
+                saved.quantity <= 0
+              ) {
+                continue;
+              }
+              const foundItem = menuItems.find((item) => item.id === saved.menuItemId);
+              if (!foundItem || !foundItem.isAvailable || (foundItem.stockItem && foundItem.stockItem.isOutOfStock)) {
+                removedNames.push(foundItem ? foundItem.name : 'Unknown Item');
+                continue;
+              }
+
+              const maxQty = foundItem.stockItem
+                ? Math.min(saved.quantity, foundItem.stockItem.currentQuantity)
+                : saved.quantity;
+
+              if (maxQty > 0) {
+                restoredMap.set(foundItem.id, {
+                  menuItem: foundItem,
+                  quantity: maxQty,
+                  notes: typeof saved.notes === 'string' ? saved.notes : ''
+                });
+              }
+            }
+
+            if (removedNames.length > 0) {
+              setCartNotification(
+                `Notice: Item(s) "${removedNames.join(', ')}" were removed from your saved cart because they are no longer available.`
+              );
+            }
+
+            setCart(restoredMap);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to restore counter cart from localStorage', e);
+      } finally {
+        hasRestoredCartRef.current = true;
+      }
+    }
+  }, [cartStorageKey, menuItems]);
+
+  // Immediately persist cart updates to localStorage scoped to current staff user
+  useEffect(() => {
+    if (!cartStorageKey || !hasRestoredCartRef.current) return;
+
+    try {
+      if (cart.size === 0) {
+        localStorage.removeItem(cartStorageKey);
+      } else {
+        const serializable = Array.from(cart.values()).map((ci) => ({
+          menuItemId: ci.menuItem.id,
+          quantity: ci.quantity,
+          notes: ci.notes
+        }));
+        localStorage.setItem(cartStorageKey, JSON.stringify(serializable));
+      }
+    } catch (e) {
+      console.warn('Failed to persist counter cart to localStorage', e);
+    }
+  }, [cart, cartStorageKey]);
 
   // Load Active Orders
   const loadActiveOrders = async () => {
@@ -259,6 +397,11 @@ export const CounterPOSPage: React.FC = () => {
 
   const handleClearCart = () => {
     setCart(new Map());
+    if (cartStorageKey) {
+      try {
+        localStorage.removeItem(cartStorageKey);
+      } catch {}
+    }
   };
 
   // Place Order Checkout
@@ -288,8 +431,13 @@ export const CounterPOSPage: React.FC = () => {
         body: JSON.stringify(payload)
       });
 
-      // Clear cart
+      // Clear cart in state and local storage
       setCart(new Map());
+      if (cartStorageKey) {
+        try {
+          localStorage.removeItem(cartStorageKey);
+        } catch {}
+      }
       setIsCartOpen(false);
 
       // Show confirmation slip modal with PIN
@@ -366,10 +514,14 @@ export const CounterPOSPage: React.FC = () => {
   }, [activeOrders]);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col pb-24 lg:pb-0">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       <Navbar />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 flex flex-col">
+      <main
+        className={`flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 flex flex-col transition-all ${
+          totalCartCount > 0 ? 'pb-36 sm:pb-28' : 'pb-8'
+        }`}
+      >
         {/* Top Control Bar */}
         <div className="flex items-center justify-between gap-4 pb-4 border-b border-slate-200">
           <div>
@@ -399,6 +551,22 @@ export const CounterPOSPage: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Cart Item Removal Notification */}
+        {cartNotification && (
+          <div className="mt-3 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-between text-xs sm:text-sm">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span>{cartNotification}</span>
+            </div>
+            <button
+              onClick={() => setCartNotification(null)}
+              className="text-amber-700 hover:text-amber-900 text-xs font-semibold"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Global Error Banner */}
         {errorMessage && (
@@ -584,30 +752,39 @@ export const CounterPOSPage: React.FC = () => {
 
         {/* Floating Mobile Sticky Cart Bar */}
         {totalCartCount > 0 && (
-          <div className="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 p-3 sm:p-4 shadow-lg z-30 flex items-center justify-between max-w-7xl mx-auto">
-            <div className="flex items-center space-x-3">
-              <div className="relative">
-                <div className="w-10 h-10 rounded-full bg-orange-600 text-white flex items-center justify-center shadow-sm">
-                  <ShoppingCart className="w-5 h-5" />
+          <div
+            id="counter-floating-cart-bar"
+            className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 sm:px-6 py-2.5 sm:py-3.5 shadow-2xl z-40 max-w-7xl mx-auto"
+            style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom, 0.625rem))' }}
+          >
+            <div className="flex items-center justify-between gap-2 max-w-full">
+              <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1">
+                <div className="relative flex-shrink-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-orange-600 text-white flex items-center justify-center shadow-sm">
+                    <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </div>
+                  <span className="absolute -top-1 -right-1 bg-slate-900 text-white text-[10px] sm:text-[11px] font-bold rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center border-2 border-white">
+                    {totalCartCount}
+                  </span>
                 </div>
-                <span className="absolute -top-1 -right-1 bg-slate-900 text-white text-[11px] font-bold rounded-full w-5 h-5 flex items-center justify-center border-2 border-white">
-                  {totalCartCount}
-                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">
+                    {totalCartCount} portion{totalCartCount > 1 ? 's' : ''}
+                  </p>
+                  <p className="text-base sm:text-lg font-bold text-slate-900 leading-tight truncate">
+                    {formatPaise(cartTotalPaise)}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-slate-500 font-medium">{totalCartCount} portion(s)</p>
-                <p className="text-lg font-bold text-slate-900 leading-tight">
-                  {formatPaise(cartTotalPaise)}
-                </p>
-              </div>
-            </div>
 
-            <button
-              onClick={() => setIsCartOpen(true)}
-              className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-orange-600 hover:bg-orange-700 shadow-sm transition-colors flex items-center space-x-2"
-            >
-              <span>Review Cart</span>
-            </button>
+              <button
+                id="counter-review-cart-btn"
+                onClick={() => setIsCartOpen(true)}
+                className="flex-shrink-0 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-orange-600 hover:bg-orange-700 active:bg-orange-800 shadow-md transition-all flex items-center space-x-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-1"
+              >
+                <span>Review Cart</span>
+              </button>
+            </div>
           </div>
         )}
       </main>
@@ -619,11 +796,38 @@ export const CounterPOSPage: React.FC = () => {
         title={`Review Cart (${totalCartCount} items)`}
       >
         <div className="space-y-4">
-          {/* Cart Error Banner */}
+          {/* Cart Error Banner with Retry Option */}
           {errorMessage && (
-            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{errorMessage}</span>
+            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between gap-2">
+              <div className="flex items-center space-x-2 min-w-0">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate">{errorMessage}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handlePlaceOrder}
+                disabled={isPlacingOrder}
+                className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded text-[11px] transition-colors flex-shrink-0"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {/* Cart Item Removal Notification */}
+          {cartNotification && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-2">
+              <div className="flex items-center space-x-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-600" />
+                <span>{cartNotification}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCartNotification(null)}
+                className="text-amber-700 hover:text-amber-900 text-[11px] font-semibold"
+              >
+                Dismiss
+              </button>
             </div>
           )}
 

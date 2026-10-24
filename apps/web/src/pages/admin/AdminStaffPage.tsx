@@ -19,7 +19,8 @@ import {
   Monitor,
   Utensils,
   Boxes,
-  BarChart3
+  BarChart3,
+  Trash2
 } from 'lucide-react';
 
 export const AdminStaffPage: React.FC = () => {
@@ -47,6 +48,12 @@ export const AdminStaffPage: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [resetSubmitting, setResetSubmitting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+
+  // Delete Staff Modal State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedUserForDelete, setSelectedUserForDelete] = useState<SafeUser | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const fetchUsers = async () => {
     try {
@@ -132,6 +139,11 @@ export const AdminStaffPage: React.FC = () => {
     clearMessages();
     const newStatus = !userToToggle.isActive;
 
+    if (userToToggle.role === Role.ADMIN) {
+      setErrorMessage('Administrative accounts cannot be deactivated.');
+      return;
+    }
+
     if (userToToggle.id === currentUser?.id && !newStatus) {
       setErrorMessage('You cannot deactivate your own administrative account.');
       return;
@@ -153,6 +165,36 @@ export const AdminStaffPage: React.FC = () => {
       } else {
         setErrorMessage('Failed to update account status.');
       }
+    }
+  };
+
+  // Handle Delete Non-Admin Staff Account
+  const handleDeleteSubmit = async () => {
+    if (!selectedUserForDelete) return;
+    if (selectedUserForDelete.role === Role.ADMIN || selectedUserForDelete.id === currentUser?.id) {
+      setDeleteError('Administrative accounts cannot be deleted.');
+      return;
+    }
+
+    try {
+      setDeleteSubmitting(true);
+      setDeleteError(null);
+      await apiRequest(`/users/${selectedUserForDelete.id}`, {
+        method: 'DELETE'
+      });
+
+      setUsers(users.filter((u) => u.id !== selectedUserForDelete.id));
+      setIsDeleteModalOpen(false);
+      setSuccessMessage(`Staff member "${selectedUserForDelete.name}" has been permanently deleted.`);
+      setSelectedUserForDelete(null);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setDeleteError(err.message);
+      } else {
+        setDeleteError('Failed to delete staff account.');
+      }
+    } finally {
+      setDeleteSubmitting(false);
     }
   };
 
@@ -406,13 +448,21 @@ export const AdminStaffPage: React.FC = () => {
 
                           <button
                             onClick={() => handleToggleStatus(staff)}
-                            disabled={staff.id === currentUser?.id}
+                            disabled={staff.id === currentUser?.id || staff.role === Role.ADMIN}
                             className={`inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                               staff.isActive
                                 ? 'text-rose-700 bg-rose-50 hover:bg-rose-100'
                                 : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
                             } disabled:opacity-40 disabled:cursor-not-allowed`}
-                            title={staff.isActive ? 'Deactivate Account' : 'Activate Account'}
+                            title={
+                              staff.role === Role.ADMIN
+                                ? 'Administrators cannot be deactivated'
+                                : staff.id === currentUser?.id
+                                ? 'You cannot deactivate your own account'
+                                : staff.isActive
+                                ? 'Deactivate Account'
+                                : 'Activate Account'
+                            }
                           >
                             {staff.isActive ? (
                               <>
@@ -426,6 +476,21 @@ export const AdminStaffPage: React.FC = () => {
                               </>
                             )}
                           </button>
+
+                          {staff.role !== Role.ADMIN && staff.id !== currentUser?.id && (
+                            <button
+                              onClick={() => {
+                                setSelectedUserForDelete(staff);
+                                setDeleteError(null);
+                                setIsDeleteModalOpen(true);
+                              }}
+                              className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg text-rose-700 bg-rose-50 hover:bg-rose-100 transition-colors"
+                              title="Delete Staff Member"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mr-1 text-rose-600" />
+                              Delete
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -468,12 +533,21 @@ export const AdminStaffPage: React.FC = () => {
 
                       <button
                         onClick={() => handleToggleStatus(staff)}
-                        disabled={staff.id === currentUser?.id}
+                        disabled={staff.id === currentUser?.id || staff.role === Role.ADMIN}
                         className={`inline-flex items-center px-3 py-2 text-xs font-medium rounded-lg ${
                           staff.isActive
                             ? 'text-rose-700 bg-rose-50 hover:bg-rose-100'
                             : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
-                        } disabled:opacity-40`}
+                        } disabled:opacity-40 disabled:cursor-not-allowed`}
+                        title={
+                          staff.role === Role.ADMIN
+                            ? 'Administrators cannot be deactivated'
+                            : staff.id === currentUser?.id
+                            ? 'You cannot deactivate your own account'
+                            : staff.isActive
+                            ? 'Deactivate'
+                            : 'Activate'
+                        }
                       >
                         {staff.isActive ? (
                           <>
@@ -487,6 +561,20 @@ export const AdminStaffPage: React.FC = () => {
                           </>
                         )}
                       </button>
+
+                      {staff.role !== Role.ADMIN && staff.id !== currentUser?.id && (
+                        <button
+                          onClick={() => {
+                            setSelectedUserForDelete(staff);
+                            setDeleteError(null);
+                            setIsDeleteModalOpen(true);
+                          }}
+                          className="inline-flex items-center px-3 py-2 text-xs font-medium rounded-lg text-rose-700 bg-rose-50 hover:bg-rose-100"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1 text-rose-600" />
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -633,6 +721,75 @@ export const AdminStaffPage: React.FC = () => {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete Staff Confirmation Modal */}
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          if (!deleteSubmitting) {
+            setIsDeleteModalOpen(false);
+            setSelectedUserForDelete(null);
+          }
+        }}
+        title={`Delete Staff Account: ${selectedUserForDelete?.name || ''}`}
+      >
+        <div className="space-y-4">
+          <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-2">
+            <div className="flex items-center space-x-2 font-bold text-rose-700 text-sm">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>Confirm Permanent Account Deletion</span>
+            </div>
+            <p>
+              Are you sure you want to permanently delete the staff account for{' '}
+              <span className="font-semibold text-rose-950">{selectedUserForDelete?.name}</span> (
+              {selectedUserForDelete?.email})?
+            </p>
+            <p className="text-slate-600 mt-1">
+              Note: If this account has recorded operational orders or historical activity, deletion will be blocked
+              to preserve audit integrity. In that scenario, you can deactivate the account instead.
+            </p>
+          </div>
+
+          {deleteError && (
+            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{deleteError}</span>
+            </div>
+          )}
+
+          <div className="pt-2 flex justify-end space-x-3">
+            <button
+              type="button"
+              disabled={deleteSubmitting}
+              onClick={() => {
+                setIsDeleteModalOpen(false);
+                setSelectedUserForDelete(null);
+              }}
+              className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={deleteSubmitting}
+              onClick={handleDeleteSubmit}
+              className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors disabled:opacity-60"
+            >
+              {deleteSubmitting ? (
+                <>
+                  <Trash2 className="w-4 h-4 mr-1.5 animate-spin" />
+                  <span>Deleting...</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-1.5" />
+                  <span>Delete Staff Account</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

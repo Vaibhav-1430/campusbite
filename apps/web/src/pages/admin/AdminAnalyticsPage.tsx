@@ -18,15 +18,18 @@ import {
   ChefHat,
   Package,
   Layers,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Trash2
 } from 'lucide-react';
 import { Navbar } from '../../components/common/Navbar.js';
+import { Modal } from '../../components/common/Modal.js';
 import {
   SalesSummaryDto,
   MenuItemPerformanceDto,
   KitchenPerformanceDto,
   InventoryReportDto,
-  DailyClosingReportDto
+  DailyClosingReportDto,
+  ResetBusinessDataResponse
 } from '@campusbite/shared';
 import { apiRequest, downloadCsv, ApiError } from '../../services/api.js';
 
@@ -65,6 +68,39 @@ export const AdminAnalyticsPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Business Data Reset Modal & Action State
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetConfirmationInput, setResetConfirmationInput] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+
+  const handleResetBusinessData = async () => {
+    if (resetConfirmationInput !== 'RESET BUSINESS DATA' || isResetting) return;
+    setResetError(null);
+    try {
+      setIsResetting(true);
+      const res = await apiRequest<ResetBusinessDataResponse>('/admin/reset-business-data', {
+        method: 'POST',
+        body: JSON.stringify({ confirmation: resetConfirmationInput })
+      });
+      setIsResetModalOpen(false);
+      setResetConfirmationInput('');
+      setSuccessMessage(
+        `Business data successfully reset. Cleared ${res.summary.deletedOrders} orders while preserving all ${res.summary.preservedMenuItems} menu items and admin accounts.`
+      );
+      await fetchAnalyticsData();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setResetError(err.message);
+      } else {
+        setResetError('Failed to reset business data. Please check network connection.');
+      }
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   // Helper for preset changes
   const applyDatePreset = (preset: DatePreset) => {
@@ -271,8 +307,42 @@ export const AdminAnalyticsPage: React.FC = () => {
                 <span>{exporting === 'closing' ? 'Exporting...' : 'Export Register CSV'}</span>
               </button>
             )}
+
+            {/* Prominent Danger-styled Reset Business Data Button */}
+            <button
+              id="admin-reset-business-data-btn"
+              onClick={() => {
+                setResetConfirmationInput('');
+                setResetError(null);
+                setIsResetModalOpen(true);
+              }}
+              className="inline-flex items-center px-3 py-2 border border-rose-300 rounded-lg text-sm font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 transition-colors shadow-sm focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              title="Reset operational business data while preserving menu and accounts"
+            >
+              <Trash2 className="w-4 h-4 mr-1.5 text-rose-600" />
+              <span>Reset Business Data</span>
+            </button>
           </div>
         </div>
+
+        {/* Global Success Notification */}
+        {successMessage && (
+          <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start justify-between text-emerald-800 text-sm">
+            <div className="flex items-start space-x-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold">Success: </span>
+                {successMessage}
+              </div>
+            </div>
+            <button
+              onClick={() => setSuccessMessage(null)}
+              className="text-emerald-600 hover:text-emerald-800 text-xs font-semibold"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Global Error Banner */}
         {errorMessage && (
@@ -1026,6 +1096,96 @@ export const AdminAnalyticsPage: React.FC = () => {
             </div>
           </div>
         )}
+        {/* Business Data Reset Confirmation Modal */}
+        <Modal
+          isOpen={isResetModalOpen}
+          onClose={() => {
+            if (!isResetting) {
+              setIsResetModalOpen(false);
+            }
+          }}
+          title="Reset Operational Business Data"
+        >
+          <div className="space-y-4">
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-2">
+              <div className="flex items-center space-x-2 font-bold text-rose-700 text-sm">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>Warning: Irreversible Action</span>
+              </div>
+              <p>This action will permanently erase operational and business activity data.</p>
+              <div className="mt-2 space-y-1">
+                <p className="font-semibold text-rose-800">What will be ERASED:</p>
+                <ul className="list-disc list-inside space-y-0.5 text-rose-700">
+                  <li>Historical sales and revenue records</li>
+                  <li>Completed and in-progress orders & line items</li>
+                  <li>Kitchen turnaround metrics & prep adjustments</li>
+                  <li>Order-linked inventory deductions & sequence numbers</li>
+                </ul>
+              </div>
+              <div className="mt-2 space-y-1">
+                <p className="font-semibold text-emerald-800">What will be PRESERVED:</p>
+                <ul className="list-disc list-inside space-y-0.5 text-emerald-700">
+                  <li>All menu categories and items (prices, names, prep times)</li>
+                  <li>Administrator and staff user accounts</li>
+                  <li>Stock item catalog definitions</li>
+                  <li>Security audit logs (logging this reset operation)</li>
+                </ul>
+              </div>
+            </div>
+
+            {resetError && (
+              <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>{resetError}</span>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Type <span className="font-mono font-bold text-rose-600">RESET BUSINESS DATA</span> below to confirm:
+              </label>
+              <input
+                id="reset-business-data-confirmation-input"
+                type="text"
+                value={resetConfirmationInput}
+                onChange={(e) => setResetConfirmationInput(e.target.value)}
+                placeholder="RESET BUSINESS DATA"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none font-mono"
+                disabled={isResetting}
+              />
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsResetModalOpen(false)}
+                disabled={isResetting}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                id="confirm-reset-business-data-btn"
+                type="button"
+                onClick={handleResetBusinessData}
+                disabled={resetConfirmationInput !== 'RESET BUSINESS DATA' || isResetting}
+                className="inline-flex items-center px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors"
+              >
+                {isResetting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    <span>Resetting Data...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Confirm Business Data Reset</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </Modal>
       </main>
     </div>
   );
