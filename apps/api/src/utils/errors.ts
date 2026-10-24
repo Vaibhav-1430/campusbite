@@ -7,11 +7,14 @@ export class AppError extends Error {
 
   constructor(message: string, statusCode = 500, code = 'INTERNAL_SERVER_ERROR', details?: ApiErrorDetail[] | null) {
     super(message);
+    Object.setPrototypeOf(this, new.target.prototype);
     this.name = this.constructor.name;
     this.statusCode = statusCode;
     this.code = code;
     this.details = details;
-    Error.captureStackTrace(this, this.constructor);
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    }
   }
 }
 

@@ -13,17 +13,20 @@ export const errorHandler = (
   _next: NextFunction
 ) => {
   // 1. Known AppError (Custom domain errors)
-  if (err instanceof AppError) {
-    if (err.statusCode >= 500) {
+  if (err instanceof AppError || (typeof (err as any)?.statusCode === 'number' && typeof (err as any)?.code === 'string')) {
+    const statusCode = (err as any).statusCode || 500;
+    const code = (err as any).code || 'INTERNAL_SERVER_ERROR';
+    if (statusCode >= 500) {
       logger.error(err.message, 'ErrorHandler', { path: req.path, stack: err.stack });
     }
-    return sendError(res, err.code, err.message, err.statusCode, err.details);
+    return sendError(res, code, err.message, statusCode, (err as any).details);
   }
 
   // 2. Zod Validation Error
-  if (err instanceof ZodError) {
-    const details = err.errors.map((e) => ({
-      field: e.path.join('.'),
+  if (err instanceof ZodError || err.name === 'ZodError' || Array.isArray((err as any)?.issues)) {
+    const issues = (err as any).issues || (err as any).errors || [];
+    const details = issues.map((e: any) => ({
+      field: Array.isArray(e.path) ? e.path.join('.') : String(e.path || ''),
       message: e.message
     }));
     return sendError(res, 'VALIDATION_ERROR', 'Input validation failed', 400, details);
