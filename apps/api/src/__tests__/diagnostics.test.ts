@@ -6,6 +6,7 @@ import {
   sanitizeAndEnhanceDbUrl,
   runDatabaseStartupDiagnostics
 } from '../database/diagnostics.js';
+import { runDiagnostic } from '../scripts/check-db-safety.js';
 
 describe('Database Diagnostics & Connection Normalization', () => {
   const sampleNeonPoolerUrl =
@@ -79,5 +80,130 @@ describe('Database Diagnostics & Connection Normalization', () => {
     expect(apiRes.status).toBe(200);
     expect(apiRes.body.success).toBe(true);
     expect(apiRes.body.data.database).toBe('connected');
+  });
+});
+
+describe('Database Safety Diagnostic CLI & Evaluation Gate (check-db-safety)', () => {
+  const localDevUrl = 'postgresql://postgres:pass@localhost:5432/campusbite_dev';
+  const localTestUrl = 'postgresql://postgres:pass@localhost:5432/campusbite_test';
+  const neonProdUrl = 'postgresql://campusbite_app:npg_pass123@ep-shy-rain-azmt3i55-pooler.c-3.ap-southeast-1.aws.neon.tech:5432/campusbite?sslmode=require&pgbouncer=true';
+  const localProdUrl = 'postgresql://campusbite_app:pass@localhost:5432/campusbite?sslmode=require';
+  const unencryptedProdUrl = 'postgresql://campusbite_app:pass@ep-shy-rain-azmt3i55-pooler.c-3.ap-southeast-1.aws.neon.tech:5432/campusbite?sslmode=disable';
+
+  it('passes development safety gate when targeting approved local development database', () => {
+    const result = runDiagnostic({
+      env: 'development',
+      databaseUrl: localDevUrl,
+      exitProcess: false
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.exitCode).toBe(0);
+    expect(result.gate).toBe('DEVELOPMENT');
+    expect(result.message).toContain('PASSED for development use');
+    expect(result.error).toBeUndefined();
+  });
+
+  it('fails closed with exitCode 1 in development mode when targeting a Neon cloud database', () => {
+    const result = runDiagnostic({
+      env: 'development',
+      databaseUrl: neonProdUrl,
+      exitProcess: false
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.exitCode).toBe(1);
+    expect(result.gate).toBe('DEVELOPMENT');
+    expect(result.error).toMatch(/Refusing to perform Safety Diagnostic CLI against cloud\/production database/);
+  });
+
+  it('fails closed in development mode when targeting a production database name on localhost', () => {
+    const result = runDiagnostic({
+      env: 'development',
+      databaseUrl: 'postgresql://postgres:pass@localhost:5432/campusbite',
+      exitProcess: false
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.exitCode).toBe(1);
+    expect(result.gate).toBe('DEVELOPMENT');
+    expect(result.error).toMatch(/is a production database name/);
+  });
+
+  it('passes test safety gate when targeting an approved isolated test database', () => {
+    const result = runDiagnostic({
+      env: 'test',
+      databaseUrl: localTestUrl,
+      exitProcess: false
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.exitCode).toBe(0);
+    expect(result.gate).toBe('TEST');
+    expect(result.message).toContain('Approved isolated test target');
+  });
+
+  it('fails closed in test mode when targeting Neon production database', () => {
+    const result = runDiagnostic({
+      env: 'test',
+      databaseUrl: neonProdUrl,
+      exitProcess: false
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.exitCode).toBe(1);
+    expect(result.gate).toBe('TEST');
+    expect(result.error).toMatch(/Prohibited cloud\/production/);
+  });
+
+  it('passes production safety gate when targeting valid non-local host with SSL enabled', () => {
+    const result = runDiagnostic({
+      env: 'production',
+      databaseUrl: neonProdUrl,
+      exitProcess: false
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.exitCode).toBe(0);
+    expect(result.gate).toBe('PRODUCTION');
+    expect(result.message).toContain('Target matches production criteria');
+  });
+
+  it('fails production safety gate when targeting localhost', () => {
+    const result = runDiagnostic({
+      env: 'production',
+      databaseUrl: localProdUrl,
+      exitProcess: false
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.exitCode).toBe(1);
+    expect(result.gate).toBe('PRODUCTION');
+    expect(result.error).toContain('Production cannot target localhost');
+  });
+
+  it('fails production safety gate when SSL mode is disabled', () => {
+    const result = runDiagnostic({
+      env: 'production',
+      databaseUrl: unencryptedProdUrl,
+      exitProcess: false
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.exitCode).toBe(1);
+    expect(result.gate).toBe('PRODUCTION');
+    expect(result.error).toContain('Production requires SSL mode');
+  });
+
+  it('fails safely when database URL is absent or empty', () => {
+    const result = runDiagnostic({
+      env: 'development',
+      databaseUrl: '',
+      exitProcess: false
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.exitCode).toBe(1);
+    expect(result.error).toContain('DATABASE_URL is absent or empty');
   });
 });
