@@ -5,14 +5,26 @@ import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
 import { prisma } from './database/prisma.js';
 
+import { runDatabaseStartupDiagnostics } from './database/diagnostics.js';
+
 const app = createApp();
 const server = http.createServer(app);
 
 // Initialize Socket.IO with server
 initSocketIO(server);
 
-server.listen(env.PORT, () => {
+server.listen(env.PORT, '0.0.0.0', async () => {
   logger.info(`CampusBite API server running in ${env.NODE_ENV} mode on port ${env.PORT}`, 'Server');
+
+  if (env.NODE_ENV === 'production' && env.PORT !== 10000) {
+    logger.warn(
+      `Render Web Services conventionally expect port 10000. Current PORT is configured as ${env.PORT}. If port was accidentally configured as 1000 in Render Dashboard, update PORT to 10000.`,
+      'Server'
+    );
+  }
+
+  // Execute non-blocking startup database diagnostics
+  await runDatabaseStartupDiagnostics(env.DATABASE_URL);
 });
 
 // Graceful shutdown handling

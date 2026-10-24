@@ -44,15 +44,26 @@ export const createApp = () => {
 
   // Health check endpoints (root /health for standard orchestrator probes and /api/v1/health)
   const healthCheckHandler = async (_req: express.Request, res: express.Response) => {
+    const startTime = Date.now();
     try {
-      await prisma.$queryRaw`SELECT 1`;
+      // 4-second bounded timeout prevents hanging health probes behind reverse proxies
+      await Promise.race([
+        prisma.$queryRaw`SELECT 1`,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Database probe query timed out after 4000ms')), 4000)
+        )
+      ]);
+
+      const latencyMs = Date.now() - startTime;
       return sendSuccess(res, {
         status: 'healthy',
         database: 'connected',
+        latencyMs,
         uptimeSeconds: Math.floor(process.uptime()),
         timestamp: new Date().toISOString()
       }, 200);
     } catch {
+      const latencyMs = Date.now() - startTime;
       return res.status(503).json({
         success: false,
         error: {
@@ -62,6 +73,7 @@ export const createApp = () => {
         meta: {
           status: 'degraded',
           database: 'disconnected',
+          latencyMs,
           timestamp: new Date().toISOString()
         }
       });

@@ -2,14 +2,18 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { z } from 'zod';
 
-// Load .env from api directory or monorepo root
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-dotenv.config({ path: path.resolve(process.cwd(), 'apps/api/.env') });
+// In production, environment variables provided by the container/orchestrator (e.g. Render)
+// are the authoritative source of truth. Only load local .env files when running locally
+// or when DATABASE_URL is not already supplied in the process environment.
+if (process.env.NODE_ENV !== 'production' || !process.env.DATABASE_URL) {
+  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+  dotenv.config({ path: path.resolve(process.cwd(), 'apps/api/.env') });
+}
 
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-    PORT: z.string().default('5000').transform((val) => parseInt(val, 10)),
+    PORT: z.coerce.number().default(5000),
     DATABASE_URL: z.string({ required_error: 'DATABASE_URL is required' }),
     JWT_SECRET: z.string({ required_error: 'JWT_SECRET is required' }).min(32, 'JWT_SECRET must be at least 32 characters'),
     JWT_EXPIRES_IN: z.string().default('8h'),
