@@ -18,7 +18,8 @@
     "db:generate": "npm run db:generate --workspace=@campusbite/api",
     "db:migrate": "npm run db:migrate --workspace=@campusbite/api",
     "db:deploy": "npm run db:deploy --workspace=@campusbite/api",
-    "db:seed:admin": "npm run db:seed:admin --workspace=@campusbite/api"
+    "db:seed:admin": "npm run db:seed:admin --workspace=@campusbite/api",
+    "db:create:admin": "npm run db:create:admin --workspace=@campusbite/api"
   },
   "dependencies": {
     "typescript": "^5.4.5"

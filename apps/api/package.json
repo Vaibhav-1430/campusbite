@@ -11,6 +11,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:seed:admin": "tsx src/scripts/bootstrap-admin.ts",
+    "db:create:admin": "tsx src/scripts/create-admin.ts",
     "test": "vitest run --fileParallelism=false --pool=forks"
   },
   "dependencies": {
