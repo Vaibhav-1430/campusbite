@@ -122,50 +122,50 @@ describe('Cafe47 Menu Architecture & Import Validation', () => {
       inMemoryMenuItems = new Map();
 
       // Mock prisma.category
-      vi.spyOn(prisma.category, 'findUnique').mockImplementation(async (args: any) => {
+      vi.spyOn(prisma.category, 'findUnique').mockImplementation((async (args: any) => {
         const cat = Array.from(inMemoryCategories.values()).find((c) => c.name === args.where.name);
         return cat || null;
-      });
+      }) as any);
 
       let counter = 1;
       const getUuid = () => `00000000-0000-4000-a000-${String(counter++).padStart(12, '0')}`;
 
-      vi.spyOn(prisma.category, 'create').mockImplementation(async (args: any) => {
+      vi.spyOn(prisma.category, 'create').mockImplementation((async (args: any) => {
         const id = getUuid();
         const record = { id, ...args.data, createdAt: new Date(), updatedAt: new Date() };
         inMemoryCategories.set(id, record);
         return record;
-      });
+      }) as any);
 
-      vi.spyOn(prisma.category, 'update').mockImplementation(async (args: any) => {
+      vi.spyOn(prisma.category, 'update').mockImplementation((async (args: any) => {
         const existing = inMemoryCategories.get(args.where.id);
         const updated = { ...existing, ...args.data, updatedAt: new Date() };
         inMemoryCategories.set(args.where.id, updated);
         return updated;
-      });
+      }) as any);
 
       // Mock prisma.menuItem
-      vi.spyOn(prisma.menuItem, 'findFirst').mockImplementation(async (args: any) => {
+      vi.spyOn(prisma.menuItem, 'findFirst').mockImplementation((async (args: any) => {
         const items = Array.from(inMemoryMenuItems.values());
         if (args.where?.name) {
           return items.find((i) => i.name === args.where.name) || null;
         }
         return null;
-      });
+      }) as any);
 
-      vi.spyOn(prisma.menuItem, 'create').mockImplementation(async (args: any) => {
+      vi.spyOn(prisma.menuItem, 'create').mockImplementation((async (args: any) => {
         const id = getUuid();
         const record = { id, ...args.data, createdAt: new Date(), updatedAt: new Date() };
         inMemoryMenuItems.set(id, record);
         return record;
-      });
+      }) as any);
 
-      vi.spyOn(prisma.menuItem, 'update').mockImplementation(async (args: any) => {
+      vi.spyOn(prisma.menuItem, 'update').mockImplementation((async (args: any) => {
         const existing = inMemoryMenuItems.get(args.where.id);
         const updated = { ...existing, ...args.data, updatedAt: new Date() };
         inMemoryMenuItems.set(args.where.id, updated);
         return updated;
-      });
+      }) as any);
     });
 
     it('should not mutate database when running dry-run', async () => {
