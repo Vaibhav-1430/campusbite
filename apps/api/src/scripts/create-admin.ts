@@ -353,6 +353,14 @@ if (process.argv[1]?.includes('create-admin')) {
     }, Neon: ${dbInfo.isNeon}, Pooled: ${dbInfo.isPooled}]`
   );
 
+  const requireNeon = flags.has('--require-neon') || process.env.REQUIRE_NEON === 'true';
+  if (requireNeon && (!dbInfo.isNeon || dbInfo.host === 'localhost' || dbInfo.host === '127.0.0.1')) {
+    console.error(
+      `SAFETY ABORT: Target database "${dbInfo.host}" is NOT a verified Neon production database. Refusing to proceed.`
+    );
+    process.exit(1);
+  }
+
   if (isDryRun) {
     dryRunAdminCleanup(targetEmail)
       .then((summary) => {
