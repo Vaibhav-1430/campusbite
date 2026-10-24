@@ -1,6 +1,33 @@
 import { ApiResponse, ApiErrorResponse } from '@campusbite/shared';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+/**
+ * Normalizes the API base URL to ensure canonical `/api/v1` prefix.
+ * Handles bare origins (e.g. 'https://campusbite-fmzb.onrender.com'),
+ * trailing slashes, and paths with or without `/api/v1`.
+ */
+export function resolveApiBaseUrl(rawUrl?: string): string {
+  const url = (rawUrl ?? (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_API_BASE_URL : '') ?? '').trim();
+  if (!url) {
+    return '/api/v1';
+  }
+  const clean = url.replace(/\/+$/, '');
+  if (clean.endsWith('/api/v1')) {
+    return clean;
+  }
+  if (clean.endsWith('/api')) {
+    return `${clean}/v1`;
+  }
+  return `${clean}/api/v1`;
+}
+
+/**
+ * Constructs a sanitized API URL by combining normalized base and endpoint.
+ */
+export function buildApiUrl(endpoint: string, base: string = resolveApiBaseUrl()): string {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  return `${base}${cleanEndpoint}`;
+}
+
 const TOKEN_KEY = 'campusbite_auth_token';
 
 type UnauthorizedHandler = () => void;
@@ -49,7 +76,7 @@ export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = buildApiUrl(endpoint);
 
   const headers = new Headers(options.headers || {});
   if (!headers.has('Content-Type') && options.body && typeof options.body === 'string') {
@@ -96,7 +123,7 @@ export async function apiRequest<T>(
 }
 
 export async function downloadCsv(endpoint: string, filename: string): Promise<void> {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = buildApiUrl(endpoint);
   const headers = new Headers();
   const token = getStoredToken();
   if (token) {

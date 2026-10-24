@@ -54,3 +54,9 @@ export class TooManyRequestsError extends AppError {
   }
 }
 
+export class MethodNotAllowedError extends AppError {
+  constructor(message = 'Method not allowed', code = 'METHOD_NOT_ALLOWED') {
+    super(message, 405, code);
+  }
+}
+

@@ -5,7 +5,8 @@ import { env } from './env.js';
  * Hardcoded production deployment origins that are always permitted.
  */
 export const KNOWN_PRODUCTION_ORIGINS: readonly string[] = [
-  'https://campusbite112.netlify.app'
+  'https://campusbite112.netlify.app',
+  'https://cafee47.netlify.app'
 ];
 
 /**

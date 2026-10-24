@@ -83,17 +83,21 @@ export const createApp = () => {
   app.get('/health', healthCheckHandler);
   app.get('/api/v1/health', healthCheckHandler);
 
-  // Feature Routes
-  app.use('/api/v1/auth', authRoutes);
-  app.use('/api/v1/users', userRoutes);
-  app.use('/api/v1/categories', categoryRoutes);
-  app.use('/api/v1/menu', menuRoutes);
-  app.use('/api/v1/orders', orderRoutes);
-  app.use('/api/v1/kitchen/orders', orderRoutes);
-  app.use('/api/v1/tracking', trackingRoutes);
-  app.use('/api/v1/inventory', inventoryRoutes);
-  app.use('/api/v1/analytics', analyticsRoutes);
-  app.post('/api/v1/orders/track', trackingOrderAliasHandler);
+  // Feature Routes (Canonical /api/v1 prefix with fallback root alias support)
+  const apiRouter = express.Router();
+  apiRouter.use('/auth', authRoutes);
+  apiRouter.use('/users', userRoutes);
+  apiRouter.use('/categories', categoryRoutes);
+  apiRouter.use('/menu', menuRoutes);
+  apiRouter.use('/orders', orderRoutes);
+  apiRouter.use('/kitchen/orders', orderRoutes);
+  apiRouter.use('/tracking', trackingRoutes);
+  apiRouter.use('/inventory', inventoryRoutes);
+  apiRouter.use('/analytics', analyticsRoutes);
+  apiRouter.post('/orders/track', trackingOrderAliasHandler);
+
+  app.use('/api/v1', apiRouter);
+  app.use(apiRouter);
 
   // 404 Catch-All
   app.use((_req, _res, next) => {

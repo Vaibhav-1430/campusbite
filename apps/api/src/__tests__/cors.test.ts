@@ -17,6 +17,8 @@ describe('CORS & Preflight Production Readiness Gate', () => {
     it('should recognize production Netlify origin as permitted', () => {
       expect(isOriginAllowed('https://campusbite112.netlify.app')).toBe(true);
       expect(isOriginAllowed('https://campusbite112.netlify.app/')).toBe(true);
+      expect(isOriginAllowed('https://cafee47.netlify.app')).toBe(true);
+      expect(isOriginAllowed('https://cafee47.netlify.app/')).toBe(true);
     });
 
     it('should reject unauthorized arbitrary origins', () => {

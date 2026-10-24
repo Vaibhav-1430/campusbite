@@ -4,7 +4,9 @@ import {
   setStoredToken,
   setOnUnauthorized,
   apiRequest,
-  downloadCsv
+  downloadCsv,
+  resolveApiBaseUrl,
+  buildApiUrl
 } from '../services/api.js';
 import { Role } from '@campusbite/shared';
 
@@ -203,6 +205,54 @@ describe('Frontend Session Persistence & Auth Client Regression Tests', () => {
       const user = null;
       const isUnauthenticated = !user;
       expect(isUnauthenticated).toBe(true);
+    });
+  });
+
+  describe('API Base URL Normalization & Endpoint Resolution', () => {
+    it('should default to /api/v1 when VITE_API_BASE_URL is not set or empty', () => {
+      expect(resolveApiBaseUrl('')).toBe('/api/v1');
+      expect(resolveApiBaseUrl(undefined)).toBe('/api/v1');
+      expect(resolveApiBaseUrl('   ')).toBe('/api/v1');
+    });
+
+    it('should append /api/v1 to bare domains without trailing slashes', () => {
+      expect(resolveApiBaseUrl('https://campusbite-fmzb.onrender.com')).toBe(
+        'https://campusbite-fmzb.onrender.com/api/v1'
+      );
+    });
+
+    it('should strip trailing slashes and append /api/v1', () => {
+      expect(resolveApiBaseUrl('https://campusbite-fmzb.onrender.com/')).toBe(
+        'https://campusbite-fmzb.onrender.com/api/v1'
+      );
+    });
+
+    it('should preserve canonical URLs already ending with /api/v1', () => {
+      expect(resolveApiBaseUrl('https://campusbite-fmzb.onrender.com/api/v1')).toBe(
+        'https://campusbite-fmzb.onrender.com/api/v1'
+      );
+      expect(resolveApiBaseUrl('https://campusbite-fmzb.onrender.com/api/v1/')).toBe(
+        'https://campusbite-fmzb.onrender.com/api/v1'
+      );
+    });
+
+    it('should properly complete URLs ending with /api to /api/v1', () => {
+      expect(resolveApiBaseUrl('https://campusbite-fmzb.onrender.com/api')).toBe(
+        'https://campusbite-fmzb.onrender.com/api/v1'
+      );
+    });
+
+    it('should construct valid API URLs without double slashes', () => {
+      const base = 'https://campusbite-fmzb.onrender.com/api/v1';
+      expect(buildApiUrl('/auth/login', base)).toBe(
+        'https://campusbite-fmzb.onrender.com/api/v1/auth/login'
+      );
+      expect(buildApiUrl('auth/login', base)).toBe(
+        'https://campusbite-fmzb.onrender.com/api/v1/auth/login'
+      );
+      expect(buildApiUrl('/menu', base)).toBe(
+        'https://campusbite-fmzb.onrender.com/api/v1/menu'
+      );
     });
   });
 });

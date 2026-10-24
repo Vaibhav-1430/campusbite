@@ -92,6 +92,42 @@ describe('Auth API (/api/v1/auth)', () => {
       expect(response.body.success).toBe(false);
       expect(response.body.error.code).toBe('ACCOUNT_DEACTIVATED');
     });
+
+    it('should reject GET /api/v1/auth/login with 405 Method Not Allowed and require POST', async () => {
+      const response = await request(app).get('/api/v1/auth/login');
+
+      expect(response.status).toBe(405);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error.code).toBe('METHOD_NOT_ALLOWED');
+      expect(response.body.error.message).toContain('POST');
+      expect(response.headers['allow']).toContain('POST');
+    });
+
+    it('should route POST /auth/login (root alias) identically to /api/v1/auth/login', async () => {
+      const { user, plainPassword } = await createTestUser({
+        email: 'alias-test@campusbite.internal',
+        role: Role.COUNTER
+      });
+
+      const response = await request(app)
+        .post('/auth/login')
+        .send({
+          email: 'alias-test@campusbite.internal',
+          password: plainPassword
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.user.email).toBe(user.email);
+    });
+
+    it('should reject GET /auth/login with 405 Method Not Allowed', async () => {
+      const response = await request(app).get('/auth/login');
+
+      expect(response.status).toBe(405);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error.code).toBe('METHOD_NOT_ALLOWED');
+    });
   });
 
   describe('GET /api/v1/auth/me', () => {
