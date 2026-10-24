@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: campusbite-api
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm run build:backend
+    startCommand: npm run start --workspace=@campusbite/api
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 8h
+      - key: CORS_ORIGIN
+        sync: false
+      - key: INITIAL_ADMIN_EMAIL
+        sync: false
+      - key: INITIAL_ADMIN_PASSWORD
+        sync: false
+      - key: INITIAL_ADMIN_NAME
+        value: Campus Administrator
