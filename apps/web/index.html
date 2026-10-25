@@ -7,6 +7,59 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="description" content="Cafe47 - Authentic Himalayan Cuisine, Fast Food & Beverages" />
   <title>Cafe47</title>
+  <script>
+    /* Neutralize injected Netlify HUD badge frames before render to prevent viewport overlap */
+    (function () {
+      function isNetlifyBadge(node) {
+        if (!node || node.nodeType !== 1) return false;
+        var id = (node.id || '').toLowerCase();
+        var title = (node.getAttribute && node.getAttribute('title') || '').toLowerCase();
+        var tagName = (node.tagName || '').toUpperCase();
+        return (
+          id === 'nl-badge-frame' ||
+          id === 'nl-hud-frame' ||
+          id === 'netlify-badge' ||
+          (tagName === 'IFRAME' && (id.startsWith('nl-') || title.indexOf('netlify') !== -1))
+        );
+      }
+
+      function purgeNetlifyFrames(root) {
+        if (!root) return;
+        if (isNetlifyBadge(root)) {
+          try { root.remove(); } catch (e) {}
+          return;
+        }
+        if (root.querySelectorAll) {
+          try {
+            var frames = root.querySelectorAll('#nl-badge-frame, #nl-hud-frame, #netlify-badge, iframe[id^="nl-"], iframe[title*="Netlify" i]');
+            for (var i = 0; i < frames.length; i++) {
+              frames[i].remove();
+            }
+          } catch (e) {}
+        }
+      }
+
+      var observer = new MutationObserver(function (mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+          var added = mutations[i].addedNodes;
+          for (var j = 0; j < added.length; j++) {
+            purgeNetlifyFrames(added[j]);
+          }
+        }
+      });
+
+      if (document.documentElement) {
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+      }
+
+      window.addEventListener('DOMContentLoaded', function () {
+        purgeNetlifyFrames(document.body);
+      });
+      window.addEventListener('load', function () {
+        purgeNetlifyFrames(document.body);
+      });
+    })();
+  </script>
 </head>
 
 <body class="bg-slate-50 text-slate-900 antialiased min-h-screen">

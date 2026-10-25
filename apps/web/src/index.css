@@ -20,7 +20,15 @@
   }
 }
 
-/* Ensure injected Netlify badge or floating third-party overlays do not obscure checkout elements */
+/* Ensure injected Netlify badge, HUD frames, or floating third-party overlays do not obscure checkout elements */
+#nl-badge-frame,
+#nl-hud-frame,
+iframe#nl-badge-frame,
+iframe#nl-hud-frame,
+iframe[id^="nl-"],
+iframe[title*="Netlify" i],
+iframe[title*="Powered by Netlify" i],
+iframe[title*="Netlify Drawer" i],
 #netlify-badge,
 .netlify-badge,
 [data-netlify-badge],
@@ -30,4 +38,14 @@ iframe[src*="netlify.com"] {
   pointer-events: none !important;
   opacity: 0 !important;
   visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  position: absolute !important;
+  top: -99999px !important;
+  left: -99999px !important;
+  z-index: -99999 !important;
+  clip-path: inset(100%) !important;
+  transform: scale(0) !important;
 }

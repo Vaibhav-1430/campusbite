@@ -754,8 +754,8 @@ export const CounterPOSPage: React.FC = () => {
         {totalCartCount > 0 && (
           <div
             id="counter-floating-cart-bar"
-            className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 sm:px-6 py-2.5 sm:py-3.5 shadow-2xl z-40 max-w-7xl mx-auto"
-            style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom, 0.625rem))' }}
+            className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 sm:px-6 py-2.5 sm:py-3.5 shadow-2xl z-50 max-w-7xl mx-auto pointer-events-auto"
+            style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))' }}
           >
             <div className="flex items-center justify-between gap-2 max-w-full">
               <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1">
@@ -780,7 +780,7 @@ export const CounterPOSPage: React.FC = () => {
               <button
                 id="counter-review-cart-btn"
                 onClick={() => setIsCartOpen(true)}
-                className="flex-shrink-0 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-orange-600 hover:bg-orange-700 active:bg-orange-800 shadow-md transition-all flex items-center space-x-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-1"
+                className="flex-shrink-0 min-h-[44px] px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-orange-600 hover:bg-orange-700 active:bg-orange-800 shadow-md transition-all flex items-center justify-center space-x-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-1 select-none whitespace-nowrap"
               >
                 <span>Review Cart</span>
               </button>
